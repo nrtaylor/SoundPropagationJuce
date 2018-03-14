@@ -5,8 +5,49 @@
 */
 
 #include "MainComponent.h"
+#include "AtmosphericAbsorption.h"
+#define _USE_MATH_DEFINES
 #include <math.h>
 #include <atomic>
+
+struct Butterworth1Pole
+{
+    float a1;
+    float b0;
+    float b1;
+
+    float x1;
+    float y1;
+
+    bool bypass;
+
+    Butterworth1Pole() :
+        x1(0.0),
+        y1(0.0),
+        bypass(false) {}
+
+    void Initialize(double cutoff_frequency, double sample_rate)
+    {
+        const float blt_freq_warping = 1 / tan(M_PI * cutoff_frequency / sample_rate);
+
+        const float a0 = 1 + blt_freq_warping;
+        a1 = (1 - blt_freq_warping) / a0;
+        b0 = 1 / a0;
+        b1 = b0;
+    }
+
+    float process(float x)
+    {
+        if (!bypass)
+        {
+            y1 = b0*x + b1*x1 - a1*y1;
+            x1 = x;
+
+            return y1;
+        }
+        return x;
+    }
+};
 
 class SoundEmitter
 {
@@ -42,11 +83,13 @@ public:
 
     void Update(int32 _elapsedMs)
     {
-        angle += 2 * MathConstants<float>::pi * (_elapsedMs * frequency) / 1000.f;
+        angle += 2 * (float)M_PI * (_elapsedMs * frequency) / 1000.f;
         Vector3D<float> new_position(cosf(angle), sinf(angle), 0.f);
         emitter.SetPosition(new_position);
-        gain_left.store(0.5 * sqrtf(1.f - new_position.x));
-        gain_right.store(0.5 * sqrtf(1.f + new_position.x));
+        const float geometric_attenuation = jmin(1.f, 1.f / radius);
+        const float normed_loudness = (float)M_SQRT1_2;
+        gain_left.store(normed_loudness * geometric_attenuation * sqrtf(1.f - new_position.x));
+        gain_right.store(normed_loudness * geometric_attenuation * sqrtf(1.f + new_position.x));
     }
 
     float Gain(const int32 channel) const
@@ -77,20 +120,18 @@ public:
         radius.store(_radius);
     }
     
-    void Paint(Graphics& g)
-    {
-        const Rectangle<int> rect = g.getClipBounds();
-        float min_extent = (float)jmin(rect.getWidth(), rect.getHeight());
-        
-        Vector3D<float> center(min_extent / 2.f, min_extent / 2.f, 0.f);
+    void Paint(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor)
+    {        
+        const float min_extent = (float)jmin(_bounds.getWidth(), _bounds.getHeight());
+        const Vector3D<float> center(min_extent / 2.f, min_extent / 2.f, 0.f);
 
-        g.setColour(Colour::fromRGB(0xFF, 0xFF, 0xFF));
-        g.fillEllipse(center.x - 1.f, center.y - 1.f, 2, 2);
+        _g.setColour(Colour::fromRGB(0xFF, 0xFF, 0xFF));
+        _g.fillEllipse(center.x - 1.f, center.y - 1.f, 2, 2);
 
-        const float scale = 10.f * radius.load();
+        const float scale = _zoom_factor * radius.load();
         const Vector3D<float>& emitter_pos = emitter.GetPosition();
         Vector3D<float> emitter_draw_pos(emitter_pos.x * scale + center.x, -emitter_pos.y * scale + center.y, 0.f);
-        g.fillEllipse(emitter_draw_pos.x - 1.f, emitter_draw_pos.y - 1.f, 2.5, 2.5);
+        _g.fillEllipse(emitter_draw_pos.x - 1.f, emitter_draw_pos.y - 1.f, 2.5, 2.5);
     }
 private:
     std::atomic<float> frequency;
@@ -102,9 +143,51 @@ private:
     SoundEmitter emitter;
 };
 
+struct LineSegment
+{
+    Vector3D<float> start;
+    Vector3D<float> end;
+};
+
+class RoomGeometry
+{
+public:
+    RoomGeometry()
+    {
+        walls.reserve(4);        
+        walls.emplace_back(LineSegment{ { -12.f,  8.f, 0.f }, {  12.f,  8.f, 0.f } });
+        walls.emplace_back(LineSegment{ {  12.f,  8.f, 0.f }, {  12.f, -8.f, 0.f } });
+        walls.emplace_back(LineSegment{ {  12.f, -8.f, 0.f }, { -12.f, -8.f, 0.f } });
+        walls.emplace_back(LineSegment{ { -12.f, -8.f, 0.f }, { -12.f,  8.f, 0.f } });
+    }
+
+    void Paint(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor)
+    {
+        const float min_extent = (float)jmin(_bounds.getWidth(), _bounds.getHeight());
+        const Vector3D<float> center(min_extent / 2.f, min_extent / 2.f, 0.f);
+
+        _g.setColour(Colour::fromRGB(0x77, 0x1c, 0x47));
+        Path room;        
+        for (const LineSegment& wall : walls)
+        {
+            const Line<float> drawLine(
+                wall.start.x * _zoom_factor + center.x, 
+                -wall.start.y * _zoom_factor + center.y,
+                wall.end.x * _zoom_factor + center.x,
+                -wall.end.y * _zoom_factor + center.y);
+            room.addLineSegment(drawLine, 2.f);
+        }
+        _g.fillPath(room);
+    }
+private:
+    std::vector<LineSegment> walls;
+};
+
 //==============================================================================
 MainComponent::MainComponent() :
-    test_sound_buffer_index(0)
+    initialized(false),
+    test_sound_buffer_index(0),
+    sample_rate(0.f)
 {
     start_time = Time::getMillisecondCounter();
 
@@ -112,7 +195,7 @@ MainComponent::MainComponent() :
     setWantsKeyboardFocus(true);
 
     addAndMakeVisible(&slider_gain);
-    slider_gain.setRange(0.0, 1.0, 0.05);
+    slider_gain.setRange(0.0, 2.0, 0.05);
     slider_gain.setTextValueSuffix(" %");
     slider_gain.setValue(0.8);
     slider_gain.addListener(this);
@@ -142,11 +225,35 @@ MainComponent::MainComponent() :
     label_radius.setText("Radius", dontSendNotification);
     label_radius.attachToComponent(&slider_radius, true);
 
+    addAndMakeVisible(&group_atmosphere);
+    group_atmosphere.setText("Atmosphere");
+    
+    slider_temperature.setBounds(20, 22, 198, 22);
+    slider_temperature.setRange(-20.0, 120.0, 1.0);
+    slider_temperature.setTextValueSuffix(" F");
+    slider_temperature.setValue(60.0);
+    slider_temperature.addListener(this);
+    group_atmosphere.addAndMakeVisible(&slider_temperature);
+
+    slider_humidity.setBounds(20, 44, 198, 22);
+    slider_humidity.setRange(1, 99.9, 0.50);
+    slider_humidity.setTextValueSuffix(" %H");
+    slider_humidity.setValue(60.0);
+    slider_humidity.addListener(this);
+    group_atmosphere.addAndMakeVisible(&slider_humidity);
+
+    label_cutoff.setText("Cuttoff Freq", dontSendNotification);
+    label_cutoff.setBounds(12, 66, 198, 22);
+    group_atmosphere.addAndMakeVisible(&label_cutoff);
+
     // Make sure you set the size of the component after
     // you add any child components.
     setSize (800, 600);
 
+    atmospheric_filter = std::make_unique<Butterworth1Pole>();
+    atmospheric_filter->bypass = true;
     moving_emitter = std::make_unique<MovingEmitter>();
+    room = std::make_unique<RoomGeometry>();
     test_sound_buffer = std::make_unique<AudioSampleBuffer>();
 }
 
@@ -162,7 +269,8 @@ void MainComponent::initialise()
 {
     {
         AudioFormatManager format_manager; format_manager.registerBasicFormats();
-        File file = File::getCurrentWorkingDirectory().getChildFile("..\\..\\..\\test_tones.wav");
+        //File file = File::getCurrentWorkingDirectory().getChildFile("..\\..\\..\\test_tones.wav");
+        File file = File::getCurrentWorkingDirectory().getChildFile("..\\..\\..\\lake_mono_2chnl.wav");
         std::unique_ptr<AudioFormatReader> reader(format_manager.createReaderFor(file));
 
         if (reader != nullptr)
@@ -178,6 +286,7 @@ void MainComponent::initialise()
     }
 
     startTimerHz(60);
+    initialized = true;
 }
 
 void MainComponent::shutdown()
@@ -211,12 +320,14 @@ void MainComponent::shutdownAudio()
 }
 
 //==============================================================================
-void MainComponent::paint (Graphics& g)
+void MainComponent::paint (Graphics& _g)
 {
     // You can add your component specific drawing code here!
     // This will draw over the top of the openGL background.
-    
-    moving_emitter->Paint(g);
+    const Rectangle<int> bounds = _g.getClipBounds();
+    const float zoom_factor = 10.f;
+    room->Paint(_g, bounds, zoom_factor);
+    moving_emitter->Paint(_g, bounds, zoom_factor);
 }
 
 void MainComponent::resized()
@@ -229,14 +340,15 @@ void MainComponent::resized()
 
     slider_gain.setBounds(new_width - 202, 200, 200, 20);
     slider_freq.setBounds(new_width - 202, 200 + 22, 200, 20);
-    slider_radius.setBounds(new_width - 202, 200 + 44, 200, 20);
+    slider_radius.setBounds(new_width - 202, 200 + 46, 200, 20);
+    group_atmosphere.setBounds(new_width - 244, 200 + 88, 238, 160);
 }
 
 // Audio Component
 void MainComponent::prepareToPlay(int samplesPerBlockExpected,
     double sampleRate)
 {
-    return;
+    sample_rate = (float)sampleRate;
 }
 
 void MainComponent::releaseResources()
@@ -246,6 +358,10 @@ void MainComponent::releaseResources()
 void MainComponent::getNextAudioBlock(const AudioSourceChannelInfo& bufferToFill)
 {
     bufferToFill.clearActiveBufferRegion();
+    if (!initialized)
+    {
+        return;
+    }
     const int channels = bufferToFill.buffer->getNumChannels();
 
     int samples_remaining = bufferToFill.numSamples;
@@ -261,6 +377,7 @@ void MainComponent::getNextAudioBlock(const AudioSourceChannelInfo& bufferToFill
 
     const float gain_left = moving_emitter->Gain(0);
     const float gain_right = moving_emitter->Gain(1);
+    Butterworth1Pole& lpf = *atmospheric_filter.get();
 
     while (samples_remaining > 0)
     {
@@ -269,6 +386,14 @@ void MainComponent::getNextAudioBlock(const AudioSourceChannelInfo& bufferToFill
 
         for (int channel = 0; channel < channels; ++channel)
         {
+            const float *read_pos = buffer->getReadPointer(channel, buffer_index);
+            float *write_pos = buffer->getWritePointer(channel, buffer_index);
+
+            for (int s = 0; s < samples_to_write; ++s, ++read_pos, ++write_pos)
+            {
+                *write_pos = lpf.process(*read_pos);
+            }
+
             bufferToFill.buffer->addFrom(channel,
                 sample_offset,
                 *buffer,
@@ -316,8 +441,22 @@ void MainComponent::sliderValueChanged(Slider* slider)
     {
         moving_emitter->SetFrequency((float)slider_freq.getValue());
     }
-    else if (slider == &slider_radius)
+    else if (slider == &slider_radius ||
+             slider == &slider_temperature ||
+             slider == &slider_humidity)
     {
-        moving_emitter->SetRadius((float)slider_radius.getValue());
+        const float next_radius = (float)slider_radius.getValue();
+        const double next_temperature = slider_temperature.getValue();
+        const double next_humidity = slider_humidity.getValue();
+        moving_emitter->SetRadius(next_radius);
+        const double filter_gain_at_cutoff_db = -3.;
+        const double target_atmospheric_coefficient = -filter_gain_at_cutoff_db / (double)next_radius;
+        const float cuttoff_frequency = (float)AtmosphericAbsorption::Frequency(target_atmospheric_coefficient, next_humidity, next_temperature);
+        atmospheric_filter->Initialize(cuttoff_frequency, sample_rate);
+        atmospheric_filter->bypass = cuttoff_frequency > sample_rate / 2.f;
+        
+        char b[256];
+        sprintf_s(b, "Cutoff %.1f Hz", cuttoff_frequency);
+        label_cutoff.setText(b, dontSendNotification);
     }
 }

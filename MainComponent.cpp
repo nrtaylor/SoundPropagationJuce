@@ -186,7 +186,7 @@ private:
 //==============================================================================
 MainComponent::MainComponent() :
     initialized(false),
-    test_sound_buffer_index(0),
+    selected_test_buffer(0),
     sample_rate(0.f)
 {
     start_time = Time::getMillisecondCounter();
@@ -246,6 +246,8 @@ MainComponent::MainComponent() :
     label_cutoff.setBounds(12, 66, 198, 22);
     group_atmosphere.addAndMakeVisible(&label_cutoff);
 
+    addAndMakeVisible(&combo_selected_sound);
+
     // Make sure you set the size of the component after
     // you add any child components.
     setSize (800, 600);
@@ -253,8 +255,7 @@ MainComponent::MainComponent() :
     atmospheric_filter = std::make_unique<Butterworth1Pole>();
     atmospheric_filter->bypass = true;
     moving_emitter = std::make_unique<MovingEmitter>();
-    room = std::make_unique<RoomGeometry>();
-    test_sound_buffer = std::make_unique<AudioSampleBuffer>();
+    room = std::make_unique<RoomGeometry>();    
 }
 
 MainComponent::~MainComponent()
@@ -264,19 +265,18 @@ MainComponent::~MainComponent()
     shutdownAudio();
 }
 
-//==============================================================================
-void MainComponent::initialise()
+namespace SoundBufferHelper
 {
+    void LoadFromFile(SoundBuffer& buffer, AudioFormatManager& format_manager, const char* file_name)
     {
-        AudioFormatManager format_manager; format_manager.registerBasicFormats();
-        //File file = File::getCurrentWorkingDirectory().getChildFile("..\\..\\..\\test_tones.wav");
-        File file = File::getCurrentWorkingDirectory().getChildFile("..\\..\\..\\lake_mono_2chnl.wav");
+        File file = File::getCurrentWorkingDirectory().getChildFile(file_name);
         std::unique_ptr<AudioFormatReader> reader(format_manager.createReaderFor(file));
 
         if (reader != nullptr)
-        {            
-            test_sound_buffer->setSize(reader->numChannels, reader->lengthInSamples);
-            reader->read(test_sound_buffer.get(),
+        {
+            buffer.buffer = std::make_unique<AudioSampleBuffer>();
+            buffer.buffer->setSize(reader->numChannels, reader->lengthInSamples);
+            reader->read(buffer.buffer.get(),
                 0,
                 reader->lengthInSamples,
                 0,
@@ -284,6 +284,31 @@ void MainComponent::initialise()
                 true);
         }
     }
+}
+
+//==============================================================================
+void MainComponent::initialise()
+{
+    {
+        AudioFormatManager format_manager; format_manager.registerBasicFormats();
+               
+        SoundBufferHelper::LoadFromFile(test_buffers[0], format_manager, "..\\..\\..\\lake_mono_2chnl.wav");
+        strcpy(test_buffers[0].name, "Lake");
+        combo_selected_sound.addItem(test_buffers[0].name, 1);
+        SoundBufferHelper::LoadFromFile(test_buffers[1], format_manager, "..\\..\\..\\test_tones.wav");
+        strcpy(test_buffers[1].name, "Two Tones");
+        combo_selected_sound.addItem(test_buffers[1].name, 2);
+    }
+
+    {
+        MessageManagerLock lock;
+        combo_selected_sound.setSelectedId(1);
+        combo_selected_sound.addListener(this);
+
+        addAndMakeVisible(&label_selected_sound);
+        label_selected_sound.setText("Source", dontSendNotification);
+        label_selected_sound.attachToComponent(&combo_selected_sound, true);
+    }    
 
     startTimerHz(60);
     initialized = true;
@@ -338,6 +363,8 @@ void MainComponent::resized()
 
     int32 new_width = getWidth();
 
+    combo_selected_sound.setBounds(new_width - 202, 200 - 24, 200, 20);
+
     slider_gain.setBounds(new_width - 202, 200, 200, 20);
     slider_freq.setBounds(new_width - 202, 200 + 22, 200, 20);
     slider_radius.setBounds(new_width - 202, 200 + 46, 200, 20);
@@ -367,13 +394,14 @@ void MainComponent::getNextAudioBlock(const AudioSourceChannelInfo& bufferToFill
     int samples_remaining = bufferToFill.numSamples;
     int sample_offset = bufferToFill.startSample;
 
-    AudioSampleBuffer* buffer = test_sound_buffer.get();
+    SoundBuffer& buffer_info = test_buffers[selected_test_buffer];
+    AudioSampleBuffer* buffer = buffer_info.buffer.get();
     if (buffer == nullptr ||
         buffer->getNumChannels() <= 0)
     {
         return;
     }
-    int& buffer_index = test_sound_buffer_index;
+    int& buffer_index = buffer_info.index;
 
     const float gain_left = moving_emitter->Gain(0);
     const float gain_right = moving_emitter->Gain(1);
@@ -458,5 +486,17 @@ void MainComponent::sliderValueChanged(Slider* slider)
         char b[256];
         sprintf_s(b, "Cutoff %.1f Hz", cuttoff_frequency);
         label_cutoff.setText(b, dontSendNotification);
+    }
+}
+
+void MainComponent::comboBoxChanged(ComboBox* comboBoxThatHasChanged)
+{
+    if (comboBoxThatHasChanged == &combo_selected_sound)
+    {
+        const uint32 next_id = combo_selected_sound.getSelectedId();
+        if (next_id > 0)
+        {
+            selected_test_buffer = next_id - 1;
+        }
     }
 }

@@ -5,6 +5,8 @@
 namespace AtmosphericAbsorption
 {
     const double kPressureSeaLevelPascals = 101325.0;
+    const double kPressureDeadSeaRecordLevelPascals = 106700.0;
+    const double kPressureEverestLevelPascals = 33900.0;
 
     // returns the absorption coefficient in db/meters
     double AbsorptionCoefficient(

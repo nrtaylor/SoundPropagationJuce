@@ -75,7 +75,7 @@ private:
     AudioSourcePlayer audioSourcePlayer;
     std::unique_ptr<MovingEmitter> moving_emitter;
     std::unique_ptr<RoomGeometry> room;    
-    std::unique_ptr<Butterworth1Pole> atmospheric_filter;
+    std::array<std::unique_ptr<Butterworth1Pole>, 2> atmospheric_filters;
     
     std::array<SoundBuffer, 2> test_buffers;
     std::atomic_uint32_t selected_test_buffer;
@@ -97,7 +97,7 @@ private:
     GroupComponent group_atmosphere;    
     Slider slider_temperature;
     Slider slider_humidity;
-    //Label label_temperature;
+    Slider slider_pressure;
     Label label_cutoff;
 
     ComboBox combo_selected_sound;

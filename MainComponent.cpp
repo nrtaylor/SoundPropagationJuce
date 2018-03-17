@@ -86,17 +86,52 @@ struct LineSegment
 class RoomGeometry
 {
 public:
-    RoomGeometry()
+    RoomGeometry() : 
+        bounding_box{ {},{} }
     {
         walls.reserve(4);
-        walls.emplace_back(LineSegment{ { -12.f,  8.f, 0.f },{ 12.f,  8.f, 0.f } });
-        walls.emplace_back(LineSegment{ { 12.f,  8.f, 0.f },{ 12.f, -8.f, 0.f } });
-        walls.emplace_back(LineSegment{ { 12.f, -8.f, 0.f },{ -12.f, -8.f, 0.f } });
-        walls.emplace_back(LineSegment{ { -12.f, -8.f, 0.f },{ -12.f,  8.f, 0.f } });
+    }
+
+    void AddWall(const Vector3D<float> start, const Vector3D<float> end)
+    {
+        walls.emplace_back(LineSegment{ start, end });
+        if (walls.size() == 1)
+        {
+            bounding_box = LineSegment{ 
+                { jmin(start.x, end.x), jmin(start.y,end.y), 0.f},
+                { jmax(start.x, end.x), jmax(start.y,end.y), 0.f } };
+        }
+        else
+        {
+            if (jmin(start.x, end.x) < bounding_box.start.x)
+            {
+                bounding_box.start.x = jmin(start.x, end.x);
+            }
+            if (jmax(start.x, end.x) > bounding_box.end.x)
+            {
+                bounding_box.end.x = jmax(start.x, end.x);
+            }
+            if (jmin(start.y, end.y) < bounding_box.start.y)
+            {
+                bounding_box.start.y = jmin(start.y, end.y);
+            }
+            if (jmax(start.y, end.y) > bounding_box.end.y)
+            {
+                bounding_box.end.y = jmax(start.y, end.y);
+            }
+        }
     }
 
     bool Intesects(const LineSegment& _line) const
     {
+        if (jmin(_line.start.x, _line.end.x) > bounding_box.end.x ||
+            jmax(_line.start.x, _line.end.x) < bounding_box.start.x ||
+            jmin(_line.start.y, _line.end.y) > bounding_box.end.y ||
+            jmax(_line.start.y, _line.end.y) < bounding_box.start.y)
+        {
+            return false;
+        }
+
         const Vector3D<float> line2 = _line.end - _line.start;
         for (const LineSegment& wall : walls)
         {
@@ -143,6 +178,7 @@ public:
     }
 private:
     std::vector<LineSegment> walls;
+    LineSegment bounding_box;
 };
 
 class MovingEmitter
@@ -174,10 +210,10 @@ public:
         return Vector3D<float>{ emitter.GetPosition().x * radius.load(), emitter.GetPosition().y * radius.load(), 0.f };
     }
 
-    void Occlude(const RoomGeometry& room)
+    void Occlude(std::shared_ptr<RoomGeometry> room)
     {
         const LineSegment to_listener = { { emitter.GetPosition().x * radius.load(), emitter.GetPosition().y * radius.load(), 0.f },{ 0.f, 0.f, 0.f } };
-        if (room.Intesects(to_listener))
+        if (room->Intesects(to_listener))
         {
             gain_left.store(0.f);
             gain_right.store(0.f);
@@ -328,7 +364,66 @@ MainComponent::MainComponent() :
     atmospheric_filters[1] = std::make_unique<Butterworth1Pole>();
     atmospheric_filters[1]->bypass = true;
     moving_emitter = std::make_unique<MovingEmitter>();
-    room = std::make_unique<RoomGeometry>();    
+
+    current_room = nullptr;
+    addAndMakeVisible(&combo_room);    
+    combo_room.addListener(this);
+
+    addAndMakeVisible(&label_selected_room);
+    label_selected_room.setText("Room", dontSendNotification);
+    label_selected_room.attachToComponent(&combo_room, true);
+    // Empty
+    {
+        std::shared_ptr<RoomGeometry> room = std::make_shared<RoomGeometry>(RoomGeometry());        
+        rooms.emplace_back(room);
+        combo_room.addItem("Empty", rooms.size());
+        combo_room.setSelectedId(1);
+    }
+    // Square
+    {
+        std::shared_ptr<RoomGeometry> room = std::make_shared<RoomGeometry>(RoomGeometry());
+        room->AddWall({ -12.f,  8.f, 0.f }, { 12.f,  8.f, 0.f });
+        room->AddWall({ 12.f,  8.f, 0.f }, { 12.f, -8.f, 0.f });
+        room->AddWall({ 12.f, -8.f, 0.f }, { -12.f, -8.f, 0.f });
+        room->AddWall({ -12.f, -8.f, 0.f }, { -12.f,  8.f, 0.f });
+        rooms.emplace_back(room);
+        combo_room.addItem("Square", rooms.size());        
+    }
+    // Wall
+    {
+        std::shared_ptr<RoomGeometry> room = std::make_shared<RoomGeometry>(RoomGeometry());
+        room->AddWall({ -1000.f, 0.f, 0.f }, { 1000, 0.f, 0.f });
+        rooms.emplace_back(room);
+        combo_room.addItem("Wall", rooms.size());        
+    }
+    // Slit
+    {
+        std::shared_ptr<RoomGeometry> room = std::make_shared<RoomGeometry>(RoomGeometry());
+        room->AddWall({ -16.f,  0.f, 0.f }, { -0.5f,  0.f, 0.f });
+        room->AddWall({ 0.5f,  0.f, 0.f }, { 16.f, 0.f, 0.f });
+        rooms.emplace_back(room);
+        combo_room.addItem("Slit", rooms.size());        
+    }
+    // Two Slits
+    {
+        std::shared_ptr<RoomGeometry> room = std::make_shared<RoomGeometry>(RoomGeometry());
+        room->AddWall({ -18.f,  0.f, 0.f }, { -6.5f,  0.f, 0.f });
+        room->AddWall({ -5.5f,  0.f, 0.f }, { 5.5f, 0.f, 0.f });
+        room->AddWall({ 6.5f,  0.f, 0.f }, { 18.f, 0.f, 0.f });
+        rooms.emplace_back(room);
+        combo_room.addItem("Two Slits", rooms.size());
+    }
+    // Room with opening
+    {
+        std::shared_ptr<RoomGeometry> room = std::make_shared<RoomGeometry>(RoomGeometry());
+        room->AddWall({ -12.f,  6.5f, 0.f }, { 12.f,  8.f, 0.f });        
+        room->AddWall({ 12.f,  8.f, 0.f }, { 12.f, 0.5f, 0.f });
+        room->AddWall({ 12.f,  -0.5f, 0.f }, { 12.f, -8.f, 0.f });
+        room->AddWall({ 12.f, -8.f, 0.f }, { -12.f, -6.5f, 0.f });
+        room->AddWall({ -12.f, -6.5f, 0.f }, { -12.f,  6.5f, 0.f });
+        rooms.emplace_back(room);
+        combo_room.addItem("Trap Room with Opening", rooms.size());
+    }
 }
 
 MainComponent::~MainComponent()
@@ -422,18 +517,24 @@ void MainComponent::paint (Graphics& _g)
 {
     // You can add your component specific drawing code here!
     // This will draw over the top of the openGL background.
-    if (show_spl.load() &&
-        flag_refresh_image.load())
+    if (show_spl.load())
     {
-        std::lock_guard<std::mutex> guard(mutex_image);
-        image_spl = image_next;        
-        flag_refresh_image.store(false);
-    }
-    _g.drawImageAt(image_spl, 0, 0);
+        if (flag_refresh_image.load())
+        {
+            std::lock_guard<std::mutex> guard(mutex_image);
+            image_spl = image_next;
+            flag_refresh_image.store(false);
+        }
+        _g.drawImageAt(image_spl, 0, 0);
+    }    
 
     const Rectangle<int> bounds = _g.getClipBounds();
     const float zoom_factor = 10.f;
-    room->Paint(_g, bounds, zoom_factor);
+    std::shared_ptr<RoomGeometry> room = current_room;
+    if (room != nullptr)
+    {
+        room->Paint(_g, bounds, zoom_factor);
+    }
     moving_emitter->Paint(_g, bounds, zoom_factor);
 }
 
@@ -451,7 +552,8 @@ void MainComponent::resized()
     }
 
     const int32 new_width = getWidth();
-    combo_selected_sound.setBounds(new_width - 202, 200 - 24, 200, 20);
+    combo_selected_sound.setBounds(new_width - 202, 200 - 46, 200, 20);
+    combo_room.setBounds(new_width - 202, 200 - 24, 200, 20);
 
     slider_gain.setBounds(new_width - 202, 200, 200, 20);
     slider_freq.setBounds(new_width - 202, 200 + 22, 200, 20);
@@ -537,7 +639,11 @@ void MainComponent::update()
 {
     int32 frame_time = Time::getMillisecondCounter();
     moving_emitter->Update(frame_time - start_time);
-    moving_emitter->Occlude(*room.get());
+    std::shared_ptr<RoomGeometry> room = current_room;
+    if (room != nullptr)
+    {
+        moving_emitter->Occlude(room);
+    }
 
     if (show_spl.load() &&
         !flag_refresh_image.load())
@@ -549,6 +655,8 @@ void MainComponent::update()
         const float zoom_factor = 10.f;
 
         const int extent = image_next.getWidth();
+        const Image::BitmapData bitmap(image_next, Image::BitmapData::writeOnly);
+        uint8* pixel = bitmap.getPixelPointer(0, 0);
         for (int i = 0; i < extent; ++i)
         {
             for (int j = 0; j < extent; ++j)
@@ -561,8 +669,11 @@ void MainComponent::update()
                 {
                     energy = 1.f / jmax(1.f, Vector3D<float>(pixel_to_world - emitter_pos).length());
                 }
-                const uint32 colour = jmin<uint32>(255, (uint32)(255.f*energy));
-                image_next.setPixelAt(j, i, Colour((uint8)colour, (uint8)colour, (uint8)colour, (uint8)0xFF));
+                const uint8 colour = (uint8)jmin<uint32>(255, (uint32)(255.f*energy));                
+                *pixel++ = colour;
+                *pixel++ = colour;
+                *pixel++ = colour;
+                *pixel++ = 0xFF;
             }
         }
 
@@ -630,6 +741,14 @@ void MainComponent::comboBoxChanged(ComboBox* comboBoxThatHasChanged)
         if (next_id > 0)
         {
             selected_test_buffer = next_id - 1;
+        }
+    }
+    if (comboBoxThatHasChanged == &combo_room)
+    {
+        const uint32 next_id = combo_room.getSelectedId();
+        if (next_id > 0)
+        {
+            current_room = rooms[next_id - 1];
         }
     }
 }

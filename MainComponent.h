@@ -76,9 +76,10 @@ public:
 private:
     //==============================================================================
     AudioSourcePlayer audioSourcePlayer;
-    std::unique_ptr<MovingEmitter> moving_emitter;
-    std::unique_ptr<RoomGeometry> room;    
+    std::unique_ptr<MovingEmitter> moving_emitter;   
     std::array<std::unique_ptr<Butterworth1Pole>, 2> atmospheric_filters;
+    std::vector<std::shared_ptr<RoomGeometry>> rooms;
+    std::shared_ptr<RoomGeometry> current_room;
     
     std::array<SoundBuffer, 2> test_buffers;
     std::atomic_uint32_t selected_test_buffer;
@@ -89,6 +90,9 @@ private:
     uint32 initialized;
 
     // Gui
+    ComboBox combo_room;
+    Label label_selected_room;
+
     Image image_spl;
     Image image_next;
     std::atomic_bool show_spl;

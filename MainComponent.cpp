@@ -49,6 +49,15 @@ struct Butterworth1Pole
     }
 };
 
+namespace ImageHelper
+{
+    Image SquareImage(const Rectangle<int>& bounds)
+    {
+        const int extent = jmin(bounds.getWidth(), bounds.getHeight());
+        return Image(Image::ARGB, extent, extent, true);
+    }
+}
+
 class SoundEmitter
 {
 public:
@@ -94,12 +103,19 @@ public:
             Vector3D<float> wall2 = wall.end - wall.start;
             const float numerator = wall2.y * (_line.start.x - wall.start.x) - wall2.x * (_line.start.y - wall.start.y);
             const float denominator = line2.y * wall2.x - line2.x * wall2.y;
+
             if (denominator != 0.f)
             {
                 float r = numerator / denominator;
                 if (r >= 0.f && r <= 1.f)
                 {
-                    return true;
+                    const float numerator2 = line2.y * (wall.start.x - _line.start.x) - line2.x * (wall.start.y - _line.start.y);
+                    const float denominator2 = wall2.y * line2.x - wall2.x * line2.y;
+                    r = numerator2 / denominator2;
+                    if (r >= 0.f && r <= 1.f)
+                    {
+                        return true;
+                    }
                 }
             }
         }
@@ -153,7 +169,12 @@ public:
         gain_right.store(normed_loudness * geometric_attenuation * sqrtf(1.f + new_position.x));
     }
 
-    void Clip(const RoomGeometry& room)
+    const Vector3D<float> GetPosition() const
+    {
+        return Vector3D<float>{ emitter.GetPosition().x * radius.load(), emitter.GetPosition().y * radius.load(), 0.f };
+    }
+
+    void Occlude(const RoomGeometry& room)
     {
         const LineSegment to_listener = { { emitter.GetPosition().x * radius.load(), emitter.GetPosition().y * radius.load(), 0.f },{ 0.f, 0.f, 0.f } };
         if (room.Intesects(to_listener))
@@ -218,13 +239,17 @@ private:
 MainComponent::MainComponent() :
     initialized(false),
     selected_test_buffer(0),
-    sample_rate(0.f)
+    sample_rate(0.f),
+    image_spl()
 {
     start_time = Time::getMillisecondCounter();
 
+    show_spl = false;
+    flag_refresh_image = false;
+
     setAudioChannels(0, 2);
     setWantsKeyboardFocus(true);
-
+    
     addAndMakeVisible(&slider_gain);
     slider_gain.setRange(0.0, 2.0, 0.05);
     slider_gain.setTextValueSuffix(" %");
@@ -255,6 +280,10 @@ MainComponent::MainComponent() :
     addAndMakeVisible(&label_radius);
     label_radius.setText("Radius", dontSendNotification);
     label_radius.attachToComponent(&slider_radius, true);
+
+    addAndMakeVisible(&button_show_spl);
+    button_show_spl.setButtonText("Draw SPL");
+    button_show_spl.addListener(this);
 
     addAndMakeVisible(&group_atmosphere);
     group_atmosphere.setText("Atmosphere");
@@ -393,6 +422,15 @@ void MainComponent::paint (Graphics& _g)
 {
     // You can add your component specific drawing code here!
     // This will draw over the top of the openGL background.
+    if (show_spl.load() &&
+        flag_refresh_image.load())
+    {
+        std::lock_guard<std::mutex> guard(mutex_image);
+        image_spl = image_next;        
+        flag_refresh_image.store(false);
+    }
+    _g.drawImageAt(image_spl, 0, 0);
+
     const Rectangle<int> bounds = _g.getClipBounds();
     const float zoom_factor = 10.f;
     room->Paint(_g, bounds, zoom_factor);
@@ -405,14 +443,21 @@ void MainComponent::resized()
     // If you add any child components, this is where you should
     // update their positions.
 
-    int32 new_width = getWidth();
+    const Rectangle<int> bounds = getBounds();    
+    {
+        std::lock_guard<std::mutex> guard(mutex_image);
+        image_spl = ImageHelper::SquareImage(bounds);
+        image_next = ImageHelper::SquareImage(bounds);
+    }
 
+    const int32 new_width = getWidth();
     combo_selected_sound.setBounds(new_width - 202, 200 - 24, 200, 20);
 
     slider_gain.setBounds(new_width - 202, 200, 200, 20);
     slider_freq.setBounds(new_width - 202, 200 + 22, 200, 20);
     slider_radius.setBounds(new_width - 202, 200 + 46, 200, 20);
-    group_atmosphere.setBounds(new_width - 244, 200 + 88, 238, 160);
+    button_show_spl.setBounds(new_width - 202, 200 + 68, 200, 20);
+    group_atmosphere.setBounds(new_width - 244, 200 + 110, 238, 160);
 }
 
 // Audio Component
@@ -492,7 +537,38 @@ void MainComponent::update()
 {
     int32 frame_time = Time::getMillisecondCounter();
     moving_emitter->Update(frame_time - start_time);
-    moving_emitter->Clip(*room.get());
+    moving_emitter->Occlude(*room.get());
+
+    if (show_spl.load() &&
+        !flag_refresh_image.load())
+    {
+        image_next = ImageHelper::SquareImage(getBounds());
+
+        const Vector3D<float> emitter_pos = moving_emitter->GetPosition();
+        const Vector3D<float> center(image_next.getWidth() / 2.f, image_next.getWidth() / 2.f, 0.f);
+        const float zoom_factor = 10.f;
+
+        const int extent = image_next.getWidth();
+        for (int i = 0; i < extent; ++i)
+        {
+            for (int j = 0; j < extent; ++j)
+            {
+                const Vector3D<float> pixel_to_world = { (j - center.x) / zoom_factor, 
+                                                   (i - center.y) / -zoom_factor,
+                                                    0.f};
+                float energy = 0.f;
+                if (!room->Intesects(LineSegment{ emitter_pos, pixel_to_world }))
+                {
+                    energy = 1.f / jmax(1.f, Vector3D<float>(pixel_to_world - emitter_pos).length());
+                }
+                const uint32 colour = jmin<uint32>(255, (uint32)(255.f*energy));
+                image_next.setPixelAt(j, i, Colour((uint8)colour, (uint8)colour, (uint8)colour, (uint8)0xFF));
+            }
+        }
+
+        flag_refresh_image.store(true);
+    }
+
     start_time = frame_time;
 }
 
@@ -535,6 +611,14 @@ void MainComponent::sliderValueChanged(Slider* slider)
         char b[256];
         sprintf_s(b, "Cutoff %.1f Hz", cuttoff_frequency);
         label_cutoff.setText(b, dontSendNotification);
+    }
+}
+
+void MainComponent::buttonClicked(Button* buttonClicked)
+{
+    if (buttonClicked == &button_show_spl)
+    {
+        show_spl = button_show_spl.getToggleState();
     }
 }
 

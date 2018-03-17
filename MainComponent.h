@@ -7,6 +7,7 @@
 #pragma once
 
 #include "../JuceLibraryCode/JuceHeader.h"
+#include <mutex>
 #include <array>
 
 class MovingEmitter;
@@ -36,6 +37,7 @@ class MainComponent   : public OpenGLAppComponent,
                         public AudioSource,
                         public Slider::Listener,
                         public ComboBox::Listener,
+                        public ToggleButton::Listener,
                         private Timer
 {
 public:
@@ -68,7 +70,8 @@ public:
 
     // GUI
     void sliderValueChanged(Slider* slider) override;
-    void comboBoxChanged(ComboBox* comboBoxThatHasChanged);
+    void comboBoxChanged(ComboBox* comboBoxThatHasChanged) override;
+    void buttonClicked(Button* buttonClicked) override;
 
 private:
     //==============================================================================
@@ -86,6 +89,11 @@ private:
     uint32 initialized;
 
     // Gui
+    Image image_spl;
+    Image image_next;
+    std::atomic_bool show_spl;
+    std::mutex mutex_image;
+    std::atomic_bool flag_refresh_image;
 
     Slider slider_gain;
     Label label_gain;
@@ -93,6 +101,7 @@ private:
     Label label_freq;
     Slider slider_radius;
     Label label_radius;
+    ToggleButton button_show_spl;
 
     GroupComponent group_atmosphere;    
     Slider slider_temperature;

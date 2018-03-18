@@ -197,22 +197,24 @@ public:
     void Update(int32 _elapsedMs)
     {
         angle += 2 * (float)M_PI * (_elapsedMs * frequency) / 1000.f;
+        const float emitter_radius = radius.load();
         Vector3D<float> new_position(cosf(angle), sinf(angle), 0.f);
-        emitter.SetPosition(new_position);
-        const float geometric_attenuation = jmin(1.f, 1.f / radius);
+        const float geometric_attenuation = jmin(1.f, 1.f / emitter_radius);
         const float normed_loudness = (float)M_SQRT1_2;
         gain_left.store(normed_loudness * geometric_attenuation * sqrtf(1.f - new_position.x));
         gain_right.store(normed_loudness * geometric_attenuation * sqrtf(1.f + new_position.x));
+
+        emitter.SetPosition(Vector3D<float>(new_position.x*emitter_radius, new_position.y*emitter_radius, 0.f));
     }
 
     const Vector3D<float> GetPosition() const
     {
-        return Vector3D<float>{ emitter.GetPosition().x * radius.load(), emitter.GetPosition().y * radius.load(), 0.f };
+        return emitter.GetPosition();
     }
 
     void Occlude(std::shared_ptr<RoomGeometry> room)
     {
-        const LineSegment to_listener = { { emitter.GetPosition().x * radius.load(), emitter.GetPosition().y * radius.load(), 0.f },{ 0.f, 0.f, 0.f } };
+        const LineSegment to_listener = { { emitter.GetPosition().x, emitter.GetPosition().y, 0.f },{ 0.f, 0.f, 0.f } };
         if (room->Intesects(to_listener))
         {
             gain_left.store(0.f);
@@ -256,7 +258,7 @@ public:
         _g.setColour(Colour::fromRGB(0xFF, 0xFF, 0xFF));
         _g.fillEllipse(center.x - 1.f, center.y - 1.f, 2, 2);
 
-        const float scale = _zoom_factor * radius.load();
+        const float scale = _zoom_factor;
         const Vector3D<float>& emitter_pos = emitter.GetPosition();
         Vector3D<float> emitter_draw_pos(emitter_pos.x * scale + center.x, -emitter_pos.y * scale + center.y, 0.f);
         _g.fillEllipse(emitter_draw_pos.x - 1.f, emitter_draw_pos.y - 1.f, 2.5, 2.5);
@@ -417,8 +419,8 @@ MainComponent::MainComponent() :
     {
         std::shared_ptr<RoomGeometry> room = std::make_shared<RoomGeometry>(RoomGeometry());
         room->AddWall({ -12.f,  6.5f, 0.f }, { 12.f,  8.f, 0.f });        
-        room->AddWall({ 12.f,  8.f, 0.f }, { 12.f, 0.5f, 0.f });
-        room->AddWall({ 12.f,  -0.5f, 0.f }, { 12.f, -8.f, 0.f });
+        room->AddWall({ 12.f,  8.f, 0.f }, { 12.f, 1.f, 0.f });
+        room->AddWall({ 12.f,  -1.f, 0.f }, { 12.f, -8.f, 0.f });
         room->AddWall({ 12.f, -8.f, 0.f }, { -12.f, -6.5f, 0.f });
         room->AddWall({ -12.f, -6.5f, 0.f }, { -12.f,  6.5f, 0.f });
         rooms.emplace_back(room);

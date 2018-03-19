@@ -284,6 +284,7 @@ MainComponent::MainComponent() :
 
     show_spl = false;
     flag_refresh_image = false;
+    flag_update_working = false;
 
     setAudioChannels(0, 2);
     setWantsKeyboardFocus(true);
@@ -646,40 +647,51 @@ void MainComponent::update()
     {
         moving_emitter->Occlude(room);
     }
-
-    if (show_spl.load() &&
+    
+    if (show_spl.load() &&        
         !flag_refresh_image.load())
     {
-        image_next = ImageHelper::SquareImage(getBounds());
-
-        const Vector3D<float> emitter_pos = moving_emitter->GetPosition();
-        const Vector3D<float> center(image_next.getWidth() / 2.f, image_next.getWidth() / 2.f, 0.f);
-        const float zoom_factor = 10.f;
-
-        const int extent = image_next.getWidth();
-        const Image::BitmapData bitmap(image_next, Image::BitmapData::writeOnly);
-        uint8* pixel = bitmap.getPixelPointer(0, 0);
-        for (int i = 0; i < extent; ++i)
+        bool is_working = flag_update_working.load();
+        if (!is_working &&
+            flag_update_working.compare_exchange_strong(is_working, true))
         {
-            for (int j = 0; j < extent; ++j)
-            {
-                const Vector3D<float> pixel_to_world = { (j - center.x) / zoom_factor, 
-                                                   (i - center.y) / -zoom_factor,
-                                                    0.f};
-                float energy = 0.f;
-                if (!room->Intesects(LineSegment{ emitter_pos, pixel_to_world }))
-                {
-                    energy = 1.f / jmax(1.f, Vector3D<float>(pixel_to_world - emitter_pos).length());
-                }
-                const uint8 colour = (uint8)jmin<uint32>(255, (uint32)(255.f*energy));                
-                *pixel++ = colour;
-                *pixel++ = colour;
-                *pixel++ = colour;
-                *pixel++ = 0xFF;
-            }
-        }
+            image_next = ImageHelper::SquareImage(getBounds());
 
-        flag_refresh_image.store(true);
+            std::thread worker = std::thread([this] {
+                std::shared_ptr<const RoomGeometry> room = current_room;
+                const Vector3D<float> emitter_pos = moving_emitter->GetPosition();
+                const Vector3D<float> center(image_next.getWidth() / 2.f, image_next.getWidth() / 2.f, 0.f);
+                const float inv_zoom_factor = 1.f / 10.f;
+
+                const int extent = image_next.getWidth();
+                const int half_extent = extent / 2;
+                const Image::BitmapData bitmap(image_next, Image::BitmapData::writeOnly);
+
+                uint8* pixel = bitmap.getPixelPointer(0, 0);
+                for (int i = 0; i < extent; ++i)
+                {
+                    for (int j = 0; j < extent; ++j)
+                    {
+                        const Vector3D<float> pixel_to_world = { (j - center.x) * inv_zoom_factor,
+                                                           (i - center.y) * -inv_zoom_factor,
+                                                            0.f };
+                        float energy = 0.f;
+                        if (!room->Intesects(LineSegment{ emitter_pos, pixel_to_world }))
+                        {
+                            energy = 1.f / jmax(1.f, Vector3D<float>(pixel_to_world - emitter_pos).length());
+                        }
+                        const uint8 colour = (uint8)jmin<uint32>(255, (uint32)(255.f*energy));
+                        *pixel++ = colour;
+                        *pixel++ = colour;
+                        *pixel++ = colour;
+                        *pixel++ = 0xFF;
+                    }
+                }
+                flag_update_working.store(false);
+                flag_refresh_image.store(true);
+            });
+            worker.detach();            
+        }
     }
 
     start_time = frame_time;

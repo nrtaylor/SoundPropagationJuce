@@ -98,6 +98,7 @@ private:
     std::atomic_bool show_spl;
     std::mutex mutex_image;
     std::atomic_bool flag_refresh_image;
+    std::atomic_bool flag_update_working;
 
     Slider slider_gain;
     Label label_gain;

@@ -642,7 +642,7 @@ void MainComponent::update()
 {
     int32 frame_time = Time::getMillisecondCounter();
     moving_emitter->Update(frame_time - start_time);
-    std::shared_ptr<RoomGeometry> room = current_room;
+    std::shared_ptr<RoomGeometry> room = current_room; // this isn't guarunteed atomic
     if (room != nullptr)
     {
         moving_emitter->Occlude(room);
@@ -655,16 +655,19 @@ void MainComponent::update()
         if (!is_working &&
             flag_update_working.compare_exchange_strong(is_working, true))
         {
-            image_next = ImageHelper::SquareImage(getBounds());
+            {
+                std::lock_guard<std::mutex> guard(mutex_image);
+                image_next = ImageHelper::SquareImage(getBounds());
+            }            
 
             std::thread worker = std::thread([this] {
+                std::lock_guard<std::mutex> guard(mutex_image);
                 std::shared_ptr<const RoomGeometry> room = current_room;
                 const Vector3D<float> emitter_pos = moving_emitter->GetPosition();
                 const Vector3D<float> center(image_next.getWidth() / 2.f, image_next.getWidth() / 2.f, 0.f);
                 const float inv_zoom_factor = 1.f / 10.f;
 
-                const int extent = image_next.getWidth();
-                const int half_extent = extent / 2;
+                const int extent = image_next.getWidth();                
                 const Image::BitmapData bitmap(image_next, Image::BitmapData::writeOnly);
 
                 uint8* pixel = bitmap.getPixelPointer(0, 0);

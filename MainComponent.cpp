@@ -122,6 +122,24 @@ public:
         }
     }
 
+    float Simulate(const Vector3D<float>& source, const Vector3D<float>& receiver) const
+    {
+        if (Intesects(LineSegment{ source, receiver }))
+        {
+            return 0.f;
+        }
+
+        static const float near_field_distance = 0.75f; // around 440 hz
+
+        float distance = (source - receiver).length();
+        if (distance < near_field_distance)
+        {
+            return 1.f;
+        }
+        const float geometric_attenuation = jmin(1.f, 1.f / distance);
+        return geometric_attenuation;
+    }
+
     bool Intesects(const LineSegment& _line) const
     {
         if (jmin(_line.start.x, _line.end.x) > bounding_box.end.x ||
@@ -191,39 +209,32 @@ public:
     {
         gain_left = 0.f;
         gain_right = 0.f;
+        pan_amount = 0.f;
         global_gain = 0.8f;
     }
 
-    // Combine Occlude into Update.
-    // Component Update should be using these classes not replicating the logic
-    // gain left/right should be pulled out as a process
-    // Occlude should be the room acoustics and do the ray casting
     void Update(int32 _elapsedMs)
     {
-        angle += 2 * (float)M_PI * (_elapsedMs * frequency) / 1000.f;
-        const float emitter_radius = radius.load();
-        Vector3D<float> new_position(cosf(angle), sinf(angle), 0.f);
-        const float geometric_attenuation = jmin(1.f, 1.f / emitter_radius);
-        const float normed_loudness = (float)M_SQRT1_2;
-        gain_left.store(normed_loudness * geometric_attenuation * sqrtf(1.f - new_position.x));
-        gain_right.store(normed_loudness * geometric_attenuation * sqrtf(1.f + new_position.x));
+        angle += 2 * (float)M_PI * (_elapsedMs * frequency) / 1000.f;        
+        Vector3D<float> new_position(cosf(angle), sinf(angle), 0.f);        
+        pan_amount = new_position.x;
 
+        const float emitter_radius = radius.load();
         emitter.SetPosition(Vector3D<float>(new_position.x*emitter_radius, new_position.y*emitter_radius, 0.f));
+    }
+
+    // gain left/right should be pulled out as a process
+    void ComputeGain(const float new_gain)
+    {
+        // Factor such that panned hard left/right will have the same rms as pan center.
+        const float normed_loudness = new_gain * (float)M_SQRT1_2;
+        gain_left.store(normed_loudness * sqrtf(1.f - pan_amount));
+        gain_right.store(normed_loudness * sqrtf(1.f + pan_amount));
     }
 
     const Vector3D<float> GetPosition() const
     {
         return emitter.GetPosition();
-    }
-
-    void Occlude(std::shared_ptr<RoomGeometry> room)
-    {
-        const LineSegment to_listener = { { emitter.GetPosition().x, emitter.GetPosition().y, 0.f },{ 0.f, 0.f, 0.f } };
-        if (room->Intesects(to_listener))
-        {
-            gain_left.store(0.f);
-            gain_right.store(0.f);
-        }
     }
 
     float Gain(const int32 channel) const
@@ -275,6 +286,7 @@ private:
     std::atomic<float> gain_left;
     std::atomic<float> gain_right;
     SoundEmitter emitter;
+    float pan_amount;
 };
 
 //==============================================================================
@@ -383,6 +395,7 @@ MainComponent::MainComponent() :
     {
         std::shared_ptr<RoomGeometry> room = std::make_shared<RoomGeometry>(RoomGeometry());        
         rooms.emplace_back(room);
+        current_room = rooms.back();
         combo_room.addItem("Empty", rooms.size());
         combo_room.setSelectedId(1);
     }
@@ -674,7 +687,8 @@ void MainComponent::update()
     std::shared_ptr<RoomGeometry> room = current_room; // this isn't guarunteed atomic
     if (room != nullptr)
     {
-        moving_emitter->Occlude(room);
+        const float simulated_gain = room->Simulate(moving_emitter->GetPosition(), { 0.f, 0.f, 0.f });
+        moving_emitter->ComputeGain(simulated_gain);
     }
     
     if (show_spl.load() &&        
@@ -707,11 +721,7 @@ void MainComponent::update()
                         const Vector3D<float> pixel_to_world = { (j - center.x) * inv_zoom_factor,
                                                            (i - center.y) * -inv_zoom_factor,
                                                             0.f };
-                        float energy = 0.f;
-                        if (!room->Intesects(LineSegment{ emitter_pos, pixel_to_world }))
-                        {
-                            energy = 1.f / jmax(1.f, Vector3D<float>(pixel_to_world - emitter_pos).length());
-                        }
+                        const float energy = room->Simulate(emitter_pos, pixel_to_world);
                         const uint8 colour = (uint8)jmin<uint32>(255, (uint32)(255.f*energy));
                         *pixel++ = colour;
                         *pixel++ = colour;

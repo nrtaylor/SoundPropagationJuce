@@ -194,6 +194,10 @@ public:
         global_gain = 0.8f;
     }
 
+    // Combine Occlude into Update.
+    // Component Update should be using these classes not replicating the logic
+    // gain left/right should be pulled out as a process
+    // Occlude should be the room acoustics and do the ray casting
     void Update(int32 _elapsedMs)
     {
         angle += 2 * (float)M_PI * (_elapsedMs * frequency) / 1000.f;
@@ -427,6 +431,29 @@ MainComponent::MainComponent() :
         rooms.emplace_back(room);
         combo_room.addItem("Trap Room with Opening", rooms.size());
     }
+
+    addAndMakeVisible(&combo_method);
+    combo_method.addListener(this);
+    combo_method.addItem("Specular (LOS)", Method_SpecularLOS);
+    combo_method.addItem("Ray Casts", Method_RayCasts);
+    current_method = Method_SpecularLOS;
+    combo_method.setSelectedId(Method_SpecularLOS);
+
+    addAndMakeVisible(&label_method);
+    label_method.setText("Method", dontSendNotification);
+    label_method.attachToComponent(&combo_method, true);
+
+    addAndMakeVisible(&combo_compare_to_method);
+    combo_compare_to_method.addListener(this);
+    combo_compare_to_method.addItem("Off", Method_Off);
+    combo_compare_to_method.addItem("Specular (LOS)", Method_SpecularLOS);
+    combo_compare_to_method.addItem("Ray Casts", Method_RayCasts);
+    current_compare_to_method = Method_Off;
+    combo_compare_to_method.setSelectedId(Method_Off);
+
+    addAndMakeVisible(&label_compare_to_method);
+    label_compare_to_method.setText("Compare to", dontSendNotification);
+    label_compare_to_method.attachToComponent(&combo_compare_to_method, true);
 }
 
 MainComponent::~MainComponent()
@@ -555,6 +582,8 @@ void MainComponent::resized()
     }
 
     const int32 new_width = getWidth();
+    combo_method.setBounds(new_width - 202, 200 - 90, 200, 20);
+    combo_compare_to_method.setBounds(new_width - 202, 200 - 68, 200, 20);
     combo_selected_sound.setBounds(new_width - 202, 200 - 46, 200, 20);
     combo_room.setBounds(new_width - 202, 200 - 24, 200, 20);
 
@@ -760,12 +789,20 @@ void MainComponent::comboBoxChanged(ComboBox* comboBoxThatHasChanged)
             selected_test_buffer = next_id - 1;
         }
     }
-    if (comboBoxThatHasChanged == &combo_room)
+    else if (comboBoxThatHasChanged == &combo_room)
     {
         const uint32 next_id = combo_room.getSelectedId();
         if (next_id > 0)
         {
             current_room = rooms[next_id - 1];
         }
+    }
+    else if (comboBoxThatHasChanged == &combo_method)
+    {
+        current_method = static_cast<MethodType>(combo_method.getSelectedId());
+    }
+    else if (comboBoxThatHasChanged == &combo_compare_to_method)
+    {
+        current_compare_to_method = static_cast<MethodType>(combo_compare_to_method.getSelectedId());
     }
 }

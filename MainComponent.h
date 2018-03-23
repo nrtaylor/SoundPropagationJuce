@@ -14,6 +14,17 @@ class MovingEmitter;
 class RoomGeometry;
 struct Butterworth1Pole;
 
+namespace SoundPropagation
+{
+    enum MethodType : int32
+    {
+        Method_SpecularLOS = 1,
+        Method_RayCasts,
+
+        Method_Off
+    };
+}
+
 struct SoundBuffer
 {
     SoundBuffer() :
@@ -99,15 +110,8 @@ private:
     ComboBox combo_compare_to_method;
     Label label_compare_to_method;
 
-    enum MethodType : int32
-    {        
-        Method_SpecularLOS = 1,
-        Method_RayCasts,
-
-        Method_Off
-    };
-    std::atomic<MethodType> current_method;
-    std::atomic<MethodType> current_compare_to_method;
+    std::atomic<SoundPropagation::MethodType> current_method;
+    std::atomic<SoundPropagation::MethodType> current_compare_to_method;
 
     Image image_spl;
     Image image_next;

@@ -122,25 +122,20 @@ public:
         }
     }
 
-    float Simulate(const Vector3D<float>& source, const Vector3D<float>& receiver) const
+    float Simulate(const Vector3D<float>& source, const Vector3D<float>& receiver, const SoundPropagation::MethodType method) const
     {
-        if (Intesects(LineSegment{ source, receiver }))
+        switch (method)
         {
+        case SoundPropagation::Method_SpecularLOS:
+            return SimulateSpecularLOS(source, receiver);
+        case SoundPropagation::Method_RayCasts:
+            return SimulateRayCasts(source, receiver);
+        default:
             return 0.f;
         }
-
-        static const float near_field_distance = 0.75f; // around 440 hz
-
-        float distance = (source - receiver).length();
-        if (distance < near_field_distance)
-        {
-            return 1.f;
-        }
-        const float geometric_attenuation = jmin(1.f, 1.f / distance);
-        return geometric_attenuation;
     }
 
-    bool Intesects(const LineSegment& _line) const
+    bool Intersects(const LineSegment& _line) const
     {
         if (jmin(_line.start.x, _line.end.x) > bounding_box.end.x ||
             jmax(_line.start.x, _line.end.x) < bounding_box.start.x ||
@@ -197,13 +192,76 @@ public:
 private:
     std::vector<LineSegment> walls;
     LineSegment bounding_box;
+
+    float SimulateSpecularLOS(const Vector3D<float>& source, const Vector3D<float>& receiver) const
+    {
+        if (Intersects(LineSegment{ source, receiver }))
+        {
+            return 0.f;
+        }
+
+        static const float near_field_distance = 0.75f; // around 440 hz
+
+        const float distance = (source - receiver).length();
+        if (distance < near_field_distance)
+        {
+            return 1.f;
+        }
+        const float geometric_attenuation = jmin(1.f, 1.f / distance);
+        return geometric_attenuation;
+    }
+
+    float SimulateRayCasts(const Vector3D<float>& source, const Vector3D<float>& receiver) const
+    {        
+        Vector3D<float> direction = source - receiver;
+        float distance = direction.length();
+        if (Intersects(LineSegment{ source, receiver }))
+        {
+            if (distance > FLT_EPSILON)
+            {
+                direction = direction / distance;
+                Vector3D<float> ray_orth = {-direction.y, direction.x, 0.f};
+                Vector3D<float> ray_orth_inv = ray_orth * -1.f;
+                if ((!Intersects(LineSegment{ ray_orth + receiver, source }) &&
+                     !Intersects(LineSegment{ ray_orth + receiver, receiver })) ||
+                    (!Intersects(LineSegment{ ray_orth_inv + receiver, source }) &&
+                     !Intersects(LineSegment{ ray_orth_inv + receiver, receiver })))
+                {
+                    distance += 1.f;
+                }
+                else if ((!Intersects(LineSegment{ ray_orth + source, receiver }) &&
+                          !Intersects(LineSegment{ ray_orth + source, source })) ||
+                         (!Intersects(LineSegment{ ray_orth_inv + source, receiver }) &&
+                          !Intersects(LineSegment{ ray_orth_inv + source, source })))
+                {
+                    distance += 1.f;
+                }
+                else
+                {
+                    return 0.f;
+                }
+            }
+            else
+            {
+                return 0.f;
+            }            
+        }
+
+        static const float near_field_distance = 0.75f; // around 440 hz
+        if (distance < near_field_distance)
+        {
+            return 1.f;
+        }
+        const float geometric_attenuation = jmin(1.f, 1.f / distance);
+        return geometric_attenuation;
+    }
 };
 
 class MovingEmitter
 {
 public:
     MovingEmitter() :
-        frequency(0.25f),
+        frequency(0.2f),
         radius(10.f),
         angle(0.f)
     {
@@ -316,9 +374,9 @@ MainComponent::MainComponent() :
     label_gain.attachToComponent(&slider_gain, true);
 
     addAndMakeVisible(&slider_freq);
-    slider_freq.setRange(0.001, 10.0, 0.001);
+    slider_freq.setRange(0, 8.0, 0.001);
     slider_freq.setTextValueSuffix(" Hz");
-    slider_freq.setValue(0.25);
+    slider_freq.setValue(0.2);
     slider_freq.setSkewFactorFromMidPoint(1.0);
     slider_freq.addListener(this);
 
@@ -444,13 +502,21 @@ MainComponent::MainComponent() :
         rooms.emplace_back(room);
         combo_room.addItem("Trap Room with Opening", rooms.size());
     }
+    // Small Obstructions
+    {
+        std::shared_ptr<RoomGeometry> room = std::make_shared<RoomGeometry>(RoomGeometry());
+        room->AddWall({ -3.f,  6.f, 0.f }, { 3.f,  6.f, 0.f });
+        room->AddWall({ 3.f, -6.f, 0.f }, { -3.f, -8.f, 0.f });
+        rooms.emplace_back(room);
+        combo_room.addItem("Two Small Obstructors", rooms.size());
+    }
 
     addAndMakeVisible(&combo_method);
     combo_method.addListener(this);
-    combo_method.addItem("Specular (LOS)", Method_SpecularLOS);
-    combo_method.addItem("Ray Casts", Method_RayCasts);
-    current_method = Method_SpecularLOS;
-    combo_method.setSelectedId(Method_SpecularLOS);
+    combo_method.addItem("Specular (LOS)", SoundPropagation::Method_SpecularLOS);
+    combo_method.addItem("Ray Casts", SoundPropagation::Method_RayCasts);
+    current_method = SoundPropagation::Method_SpecularLOS;
+    combo_method.setSelectedId(SoundPropagation::Method_SpecularLOS);
 
     addAndMakeVisible(&label_method);
     label_method.setText("Method", dontSendNotification);
@@ -458,11 +524,11 @@ MainComponent::MainComponent() :
 
     addAndMakeVisible(&combo_compare_to_method);
     combo_compare_to_method.addListener(this);
-    combo_compare_to_method.addItem("Off", Method_Off);
-    combo_compare_to_method.addItem("Specular (LOS)", Method_SpecularLOS);
-    combo_compare_to_method.addItem("Ray Casts", Method_RayCasts);
-    current_compare_to_method = Method_Off;
-    combo_compare_to_method.setSelectedId(Method_Off);
+    combo_compare_to_method.addItem("Off", SoundPropagation::Method_Off);
+    combo_compare_to_method.addItem("Specular (LOS)", SoundPropagation::Method_SpecularLOS);
+    combo_compare_to_method.addItem("Ray Casts", SoundPropagation::Method_RayCasts);
+    current_compare_to_method = SoundPropagation::Method_Off;
+    combo_compare_to_method.setSelectedId(SoundPropagation::Method_Off);
 
     addAndMakeVisible(&label_compare_to_method);
     label_compare_to_method.setText("Compare to", dontSendNotification);
@@ -685,9 +751,10 @@ void MainComponent::update()
     int32 frame_time = Time::getMillisecondCounter();
     moving_emitter->Update(frame_time - start_time);
     std::shared_ptr<RoomGeometry> room = current_room; // this isn't guarunteed atomic
+    const SoundPropagation::MethodType simulation_method = current_method.load();
     if (room != nullptr)
     {
-        const float simulated_gain = room->Simulate(moving_emitter->GetPosition(), { 0.f, 0.f, 0.f });
+        const float simulated_gain = room->Simulate(moving_emitter->GetPosition(), { 0.f, 0.f, 0.f }, simulation_method);
         moving_emitter->ComputeGain(simulated_gain);
     }
     
@@ -703,7 +770,7 @@ void MainComponent::update()
                 image_next = ImageHelper::SquareImage(getBounds());
             }            
 
-            std::thread worker = std::thread([this] {
+            std::thread worker = std::thread([this, simulation_method] {
                 std::lock_guard<std::mutex> guard(mutex_image);
                 std::shared_ptr<const RoomGeometry> room = current_room;
                 const Vector3D<float> emitter_pos = moving_emitter->GetPosition();
@@ -721,7 +788,7 @@ void MainComponent::update()
                         const Vector3D<float> pixel_to_world = { (j - center.x) * inv_zoom_factor,
                                                            (i - center.y) * -inv_zoom_factor,
                                                             0.f };
-                        const float energy = room->Simulate(emitter_pos, pixel_to_world);
+                        const float energy = room->Simulate(emitter_pos, pixel_to_world, simulation_method);
                         const uint8 colour = (uint8)jmin<uint32>(255, (uint32)(255.f*energy));
                         *pixel++ = colour;
                         *pixel++ = colour;
@@ -809,10 +876,10 @@ void MainComponent::comboBoxChanged(ComboBox* comboBoxThatHasChanged)
     }
     else if (comboBoxThatHasChanged == &combo_method)
     {
-        current_method = static_cast<MethodType>(combo_method.getSelectedId());
+        current_method = static_cast<SoundPropagation::MethodType>(combo_method.getSelectedId());
     }
     else if (comboBoxThatHasChanged == &combo_compare_to_method)
     {
-        current_compare_to_method = static_cast<MethodType>(combo_compare_to_method.getSelectedId());
+        current_compare_to_method = static_cast<SoundPropagation::MethodType>(combo_compare_to_method.getSelectedId());
     }
 }

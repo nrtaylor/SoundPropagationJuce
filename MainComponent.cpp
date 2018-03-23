@@ -773,6 +773,7 @@ void MainComponent::update()
             std::thread worker = std::thread([this, simulation_method] {
                 std::lock_guard<std::mutex> guard(mutex_image);
                 std::shared_ptr<const RoomGeometry> room = current_room;
+                const SoundPropagation::MethodType simulation_compare_to = current_compare_to_method.load();
                 const Vector3D<float> emitter_pos = moving_emitter->GetPosition();
                 const Vector3D<float> center(image_next.getWidth() / 2.f, image_next.getWidth() / 2.f, 0.f);
                 const float inv_zoom_factor = 1.f / 10.f;
@@ -788,7 +789,12 @@ void MainComponent::update()
                         const Vector3D<float> pixel_to_world = { (j - center.x) * inv_zoom_factor,
                                                            (i - center.y) * -inv_zoom_factor,
                                                             0.f };
-                        const float energy = room->Simulate(emitter_pos, pixel_to_world, simulation_method);
+                        float energy = room->Simulate(emitter_pos, pixel_to_world, simulation_method);
+                        if (simulation_compare_to != SoundPropagation::Method_Off)
+                        {
+                            float compare_to_energy = room->Simulate(emitter_pos, pixel_to_world, simulation_compare_to);
+                            energy = fabs(energy - compare_to_energy);                            
+                        }
                         const uint8 colour = (uint8)jmin<uint32>(255, (uint32)(255.f*energy));
                         *pixel++ = colour;
                         *pixel++ = colour;

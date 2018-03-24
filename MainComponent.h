@@ -12,6 +12,7 @@
 
 class MovingEmitter;
 class RoomGeometry;
+class RayCastCollector;
 struct Butterworth1Pole;
 
 namespace SoundPropagation
@@ -20,6 +21,7 @@ namespace SoundPropagation
     {
         Method_SpecularLOS = 1,
         Method_RayCasts,
+        Method_Pathfinding,
 
         Method_Off
     };
@@ -91,6 +93,7 @@ private:
     std::array<std::unique_ptr<Butterworth1Pole>, 2> atmospheric_filters;
     std::vector<std::shared_ptr<RoomGeometry>> rooms;
     std::shared_ptr<RoomGeometry> current_room;
+    std::unique_ptr<RayCastCollector> ray_cast_collector;
     
     std::array<SoundBuffer, 2> test_buffers;
     std::atomic_uint32_t selected_test_buffer;
@@ -127,6 +130,9 @@ private:
     Slider slider_radius;
     Label label_radius;
     ToggleButton button_show_spl;
+
+    Slider slider_spl_freq;
+    Label label_spl_freq;
 
     GroupComponent group_atmosphere;    
     Slider slider_temperature;

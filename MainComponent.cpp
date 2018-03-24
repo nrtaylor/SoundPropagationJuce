@@ -83,6 +83,49 @@ struct LineSegment
     Vector3D<float> end;
 };
 
+class RayCastCollector
+{
+public:
+    RayCastCollector() {}
+
+    void Start()
+    {
+        collector_lock.lock();
+        ray_casts.clear();
+    }
+
+    void Add(const LineSegment& ray_cast)
+    {
+        ray_casts.emplace_back(ray_cast);
+    }
+
+    void Finished()
+    {
+        collector_lock.unlock();
+    }
+
+    void Paint(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor)
+    {
+        std::lock_guard<std::mutex> guard(collector_lock);
+        if (ray_casts.size() > 0)
+        {
+            const float min_extent = (float)jmin(_bounds.getWidth(), _bounds.getHeight());
+            const Vector3D<float> center(min_extent / 2.f, min_extent / 2.f, 0.f);
+            _g.setColour(Colour::fromRGB(0x0, 0xAA, 0xAA));
+            for (const LineSegment line : ray_casts)
+            {
+                _g.drawLine((line.start.x * _zoom_factor) + center.x,
+                    -(line.start.y * _zoom_factor) + center.y,
+                    (line.end.x * _zoom_factor) + center.x,
+                    -(line.end.y * _zoom_factor) + center.y);
+            }
+        }
+    }
+private:
+    std::vector<LineSegment> ray_casts;
+    std::mutex collector_lock;
+};
+
 class RoomGeometry
 {
 public:
@@ -122,21 +165,41 @@ public:
         }
     }
 
+    template<bool capture_debug = false>
     float Simulate(const Vector3D<float>& source, const Vector3D<float>& receiver, const SoundPropagation::MethodType method) const
     {
         switch (method)
         {
         case SoundPropagation::Method_SpecularLOS:
-            return SimulateSpecularLOS(source, receiver);
+            return SimulateSpecularLOS<capture_debug>(source, receiver);
         case SoundPropagation::Method_RayCasts:
-            return SimulateRayCasts(source, receiver);
+            return SimulateRayCasts<capture_debug>(source, receiver);
         default:
             return 0.f;
         }
     }
 
+    void AssignCollector(std::unique_ptr<RayCastCollector>& collector)
+    {
+        if (collector != nullptr)
+        {
+            ray_cast_collector = std::move(collector);
+        }
+        else if (ray_cast_collector != nullptr)
+        {
+            collector = std::move(ray_cast_collector);
+        }
+    }
+
+    template<bool capture_debug = false>
     bool Intersects(const LineSegment& _line) const
     {
+        if (capture_debug &&
+            ray_cast_collector != nullptr)
+        {
+            ray_cast_collector->Add(_line);
+        }
+
         if (jmin(_line.start.x, _line.end.x) > bounding_box.end.x ||
             jmax(_line.start.x, _line.end.x) < bounding_box.start.x ||
             jmin(_line.start.y, _line.end.y) > bounding_box.end.y ||
@@ -192,10 +255,12 @@ public:
 private:
     std::vector<LineSegment> walls;
     LineSegment bounding_box;
+    std::unique_ptr<RayCastCollector> ray_cast_collector;
 
+    template<bool capture_debug = false>
     float SimulateSpecularLOS(const Vector3D<float>& source, const Vector3D<float>& receiver) const
     {
-        if (Intersects(LineSegment{ source, receiver }))
+        if (Intersects<capture_debug>(LineSegment{ source, receiver }))
         {
             return 0.f;
         }
@@ -211,28 +276,29 @@ private:
         return geometric_attenuation;
     }
 
+    template<bool capture_debug = false>
     float SimulateRayCasts(const Vector3D<float>& source, const Vector3D<float>& receiver) const
     {        
         Vector3D<float> direction = source - receiver;
         float distance = direction.length();
-        if (Intersects(LineSegment{ source, receiver }))
+        if (Intersects<capture_debug>(LineSegment{ source, receiver }))
         {
             if (distance > FLT_EPSILON)
             {
                 direction = direction / distance;
                 Vector3D<float> ray_orth = {-direction.y, direction.x, 0.f};
                 Vector3D<float> ray_orth_inv = ray_orth * -1.f;
-                if ((!Intersects(LineSegment{ ray_orth + receiver, source }) &&
-                     !Intersects(LineSegment{ ray_orth + receiver, receiver })) ||
-                    (!Intersects(LineSegment{ ray_orth_inv + receiver, source }) &&
-                     !Intersects(LineSegment{ ray_orth_inv + receiver, receiver })))
+                if ((!Intersects<capture_debug>(LineSegment{ ray_orth + receiver, receiver }) &&
+                     !Intersects<capture_debug>(LineSegment{ ray_orth + receiver, source })) ||
+                    (!Intersects<capture_debug>(LineSegment{ ray_orth_inv + receiver, receiver }) &&
+                     !Intersects<capture_debug>(LineSegment{ ray_orth_inv + receiver, source })))
                 {
                     distance += 1.f;
                 }
-                else if ((!Intersects(LineSegment{ ray_orth + source, receiver }) &&
-                          !Intersects(LineSegment{ ray_orth + source, source })) ||
-                         (!Intersects(LineSegment{ ray_orth_inv + source, receiver }) &&
-                          !Intersects(LineSegment{ ray_orth_inv + source, source })))
+                else if ((!Intersects<capture_debug>(LineSegment{ ray_orth + source, source }) &&
+                          !Intersects<capture_debug>(LineSegment{ ray_orth + source, receiver })) ||
+                         (!Intersects<capture_debug>(LineSegment{ ray_orth_inv + source, source }) &&
+                          !Intersects<capture_debug>(LineSegment{ ray_orth_inv + source, receiver })))
                 {
                     distance += 1.f;
                 }
@@ -331,9 +397,8 @@ public:
         _g.setColour(Colour::fromRGB(0xFF, 0xFF, 0xFF));
         _g.fillEllipse(center.x - 1.f, center.y - 1.f, 2, 2);
 
-        const float scale = _zoom_factor;
         const Vector3D<float>& emitter_pos = emitter.GetPosition();
-        Vector3D<float> emitter_draw_pos(emitter_pos.x * scale + center.x, -emitter_pos.y * scale + center.y, 0.f);
+        Vector3D<float> emitter_draw_pos(emitter_pos.x * _zoom_factor + center.x, -emitter_pos.y * _zoom_factor + center.y, 0.f);
         _g.fillEllipse(emitter_draw_pos.x - 1.f, emitter_draw_pos.y - 1.f, 2.5, 2.5);
     }
 private:
@@ -359,6 +424,8 @@ MainComponent::MainComponent() :
     show_spl = false;
     flag_refresh_image = false;
     flag_update_working = false;
+
+    ray_cast_collector = std::make_unique<RayCastCollector>();
 
     setAudioChannels(0, 2);
     setWantsKeyboardFocus(true);
@@ -397,6 +464,17 @@ MainComponent::MainComponent() :
     addAndMakeVisible(&button_show_spl);
     button_show_spl.setButtonText("Draw SPL");
     button_show_spl.addListener(this);
+
+    addAndMakeVisible(&slider_spl_freq);
+    slider_spl_freq.setRange(20.0, 20000.0, 0.5);
+    slider_spl_freq.setTextValueSuffix(" Hz");
+    slider_spl_freq.setValue(1000.0);
+    slider_spl_freq.setSkewFactorFromMidPoint(440.0);
+    slider_spl_freq.addListener(this);
+
+    addAndMakeVisible(&label_spl_freq);
+    label_spl_freq.setText("Test Freq", dontSendNotification);
+    label_spl_freq.attachToComponent(&slider_spl_freq, true);
 
     addAndMakeVisible(&group_atmosphere);
     group_atmosphere.setText("Atmosphere");
@@ -644,6 +722,10 @@ void MainComponent::paint (Graphics& _g)
     {
         room->Paint(_g, bounds, zoom_factor);
     }
+    if (ray_cast_collector != nullptr)
+    {
+        ray_cast_collector->Paint(_g, bounds, zoom_factor);
+    }
     moving_emitter->Paint(_g, bounds, zoom_factor);
 }
 
@@ -670,7 +752,8 @@ void MainComponent::resized()
     slider_freq.setBounds(new_width - 202, 200 + 22, 200, 20);
     slider_radius.setBounds(new_width - 202, 200 + 46, 200, 20);
     button_show_spl.setBounds(new_width - 202, 200 + 68, 200, 20);
-    group_atmosphere.setBounds(new_width - 244, 200 + 110, 238, 160);
+    slider_spl_freq.setBounds(new_width - 202, 200 + 90, 200, 20);
+    group_atmosphere.setBounds(new_width - 244, 200 + 120, 238, 140);
 }
 
 // Audio Component
@@ -753,9 +836,13 @@ void MainComponent::update()
     std::shared_ptr<RoomGeometry> room = current_room; // this isn't guarunteed atomic
     const SoundPropagation::MethodType simulation_method = current_method.load();
     if (room != nullptr)
-    {
-        const float simulated_gain = room->Simulate(moving_emitter->GetPosition(), { 0.f, 0.f, 0.f }, simulation_method);
+    {        
+        ray_cast_collector->Start();
+        room->AssignCollector(ray_cast_collector);
+        const float simulated_gain = room->Simulate<true>(moving_emitter->GetPosition(), { 0.f, 0.f, 0.f }, simulation_method);
         moving_emitter->ComputeGain(simulated_gain);
+        room->AssignCollector(ray_cast_collector);
+        ray_cast_collector->Finished();
     }
     
     if (show_spl.load() &&        

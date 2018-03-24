@@ -465,6 +465,10 @@ MainComponent::MainComponent() :
     button_show_spl.setButtonText("Draw SPL");
     button_show_spl.addListener(this);
 
+    addAndMakeVisible(&button_show_ray_casts);
+    button_show_ray_casts.setButtonText("Ray Casts");
+    button_show_ray_casts.addListener(this);
+
     addAndMakeVisible(&slider_spl_freq);
     slider_spl_freq.setRange(20.0, 20000.0, 0.5);
     slider_spl_freq.setTextValueSuffix(" Hz");
@@ -653,6 +657,7 @@ void MainComponent::initialise()
         SoundBufferHelper::LoadFromFile(test_buffers[1], format_manager, "..\\..\\..\\test_tones.wav");
         strcpy(test_buffers[1].name, "Two Tones");
         combo_selected_sound.addItem(test_buffers[1].name, 2);
+        combo_selected_sound.addItem("Off", 3);
     }
 
     {
@@ -722,7 +727,8 @@ void MainComponent::paint (Graphics& _g)
     {
         room->Paint(_g, bounds, zoom_factor);
     }
-    if (ray_cast_collector != nullptr)
+    if (show_ray_casts &&
+        ray_cast_collector != nullptr)
     {
         ray_cast_collector->Paint(_g, bounds, zoom_factor);
     }
@@ -752,8 +758,9 @@ void MainComponent::resized()
     slider_freq.setBounds(new_width - 202, 200 + 22, 200, 20);
     slider_radius.setBounds(new_width - 202, 200 + 46, 200, 20);
     button_show_spl.setBounds(new_width - 202, 200 + 68, 200, 20);
+    button_show_ray_casts.setBounds(new_width - 104, 200 + 68, 200, 20);
     slider_spl_freq.setBounds(new_width - 202, 200 + 90, 200, 20);
-    group_atmosphere.setBounds(new_width - 244, 200 + 120, 238, 140);
+    group_atmosphere.setBounds(new_width - 244, 200 + 120, 238, 116);
 }
 
 // Audio Component
@@ -774,12 +781,16 @@ void MainComponent::getNextAudioBlock(const AudioSourceChannelInfo& bufferToFill
     {
         return;
     }
+    const uint32 selected_buffer_id = selected_test_buffer.load();
+    if (selected_buffer_id >= test_buffers.size())
+    {
+        return;
+    }
     const int channels = bufferToFill.buffer->getNumChannels();
 
     int samples_remaining = bufferToFill.numSamples;
     int sample_offset = bufferToFill.startSample;
-
-    SoundBuffer& buffer_info = test_buffers[selected_test_buffer];
+    SoundBuffer& buffer_info = test_buffers[selected_buffer_id];
     AudioSampleBuffer* buffer = buffer_info.buffer.get();
     if (buffer == nullptr ||
         buffer->getNumChannels() <= 0)
@@ -836,13 +847,20 @@ void MainComponent::update()
     std::shared_ptr<RoomGeometry> room = current_room; // this isn't guarunteed atomic
     const SoundPropagation::MethodType simulation_method = current_method.load();
     if (room != nullptr)
-    {        
-        ray_cast_collector->Start();
-        room->AssignCollector(ray_cast_collector);
+    {
+        const bool ray_casts = show_ray_casts;
+        if (ray_casts)
+        {
+            ray_cast_collector->Start();
+            room->AssignCollector(ray_cast_collector);
+        }
         const float simulated_gain = room->Simulate<true>(moving_emitter->GetPosition(), { 0.f, 0.f, 0.f }, simulation_method);
         moving_emitter->ComputeGain(simulated_gain);
-        room->AssignCollector(ray_cast_collector);
-        ray_cast_collector->Finished();
+        if (ray_casts)
+        {
+            room->AssignCollector(ray_cast_collector);
+            ray_cast_collector->Finished();
+        }
     }
     
     if (show_spl.load() &&        
@@ -946,6 +964,10 @@ void MainComponent::buttonClicked(Button* buttonClicked)
     if (buttonClicked == &button_show_spl)
     {
         show_spl = button_show_spl.getToggleState();
+    }
+    else if (buttonClicked == &button_show_ray_casts)
+    {
+        show_ray_casts = button_show_ray_casts.getToggleState();
     }
 }
 

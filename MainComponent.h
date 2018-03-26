@@ -20,14 +20,7 @@ namespace NicDSP
 
 namespace SoundPropagation
 {
-    enum MethodType : int32
-    {
-        Method_SpecularLOS = 1,
-        Method_RayCasts,
-        Method_Pathfinding,
-
-        Method_Off
-    };
+    enum MethodType : int32;
 }
 
 struct SoundBuffer

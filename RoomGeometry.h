@@ -24,6 +24,78 @@ struct LineSegment
     Vector3D<float> end;
 };
 
+class SoundEmitter
+{
+public:
+    SoundEmitter() {}
+
+    void SetPosition(const Vector3D<float>& _position)
+    {
+        position = _position;
+    }
+
+    const Vector3D<float>& GetPosition() const
+    {
+        return position;
+    }
+
+private:
+    Vector3D<float> position;
+};
+
+class MovingEmitter
+{
+public:
+    MovingEmitter() :
+        frequency(0.2f),
+        radius(10.f),
+        angle(0.f)
+    {
+        gain_left = 0.f;
+        gain_right = 0.f;
+        pan_amount = 0.f;
+        global_gain = 0.8f;
+    }
+
+    const Vector3D<float> GetPosition() const
+    {
+        return emitter.GetPosition();
+    }
+
+    void SetFrequency(const float& _frequency)
+    {
+        frequency.store(_frequency);
+    }
+
+    void SetGlobalGain(const float& _gain)
+    {
+        global_gain.store(_gain);
+    }
+
+    void SetRadius(const float& _radius)
+    {
+        radius.store(_radius);
+    }
+
+    void Update(int32 _elapsedMs);
+
+    void ComputeGain(const float new_gain);
+
+    float Gain(const int32 channel) const;
+
+    void Paint(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const;
+
+private:
+    std::atomic<float> frequency;
+    std::atomic<float> global_gain;
+    std::atomic<float> radius;
+    float angle;
+    std::atomic<float> gain_left;
+    std::atomic<float> gain_right;
+    SoundEmitter emitter;
+    float pan_amount;
+};
+
 class RayCastCollector
 {
 public:

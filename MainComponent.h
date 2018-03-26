@@ -13,7 +13,10 @@
 class MovingEmitter;
 class RoomGeometry;
 class RayCastCollector;
-struct Butterworth1Pole;
+namespace NicDSP
+{
+    struct Butterworth1Pole;
+}
 
 namespace SoundPropagation
 {
@@ -90,7 +93,7 @@ private:
     //==============================================================================
     AudioSourcePlayer audioSourcePlayer;
     std::unique_ptr<MovingEmitter> moving_emitter;   
-    std::array<std::unique_ptr<Butterworth1Pole>, 2> atmospheric_filters;
+    std::array<std::unique_ptr<NicDSP::Butterworth1Pole>, 2> atmospheric_filters;
     std::vector<std::shared_ptr<RoomGeometry>> rooms;
     std::shared_ptr<RoomGeometry> current_room;
     std::unique_ptr<RayCastCollector> ray_cast_collector;

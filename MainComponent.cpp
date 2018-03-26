@@ -9,45 +9,7 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
 #include <atomic>
-
-struct Butterworth1Pole
-{
-    float a1;
-    float b0;
-    float b1;
-
-    float x1;
-    float y1;
-
-    bool bypass;
-
-    Butterworth1Pole() :
-        x1(0.0),
-        y1(0.0),
-        bypass(false) {}
-
-    void Initialize(double cutoff_frequency, double sample_rate)
-    {
-        const float blt_freq_warping = 1 / tan(M_PI * cutoff_frequency / sample_rate);
-
-        const float a0 = 1 + blt_freq_warping;
-        a1 = (1 - blt_freq_warping) / a0;
-        b0 = 1 / a0;
-        b1 = b0;
-    }
-
-    float process(float x)
-    {
-        if (!bypass)
-        {
-            y1 = b0*x + b1*x1 - a1*y1;
-            x1 = x;
-
-            return y1;
-        }
-        return x;
-    }
-};
+#include "SignalProcessing.h"
 
 namespace ImageHelper
 {
@@ -422,6 +384,7 @@ MainComponent::MainComponent() :
     start_time = Time::getMillisecondCounter();
 
     show_spl = false;
+    show_ray_casts = false;
     flag_refresh_image = false;
     flag_update_working = false;
 
@@ -518,9 +481,9 @@ MainComponent::MainComponent() :
     // you add any child components.
     setSize (800, 600);
 
-    atmospheric_filters[0] = std::make_unique<Butterworth1Pole>();
+    atmospheric_filters[0] = std::make_unique<NicDSP::Butterworth1Pole>();
     atmospheric_filters[0]->bypass = true;
-    atmospheric_filters[1] = std::make_unique<Butterworth1Pole>();
+    atmospheric_filters[1] = std::make_unique<NicDSP::Butterworth1Pole>();
     atmospheric_filters[1]->bypass = true;
     moving_emitter = std::make_unique<MovingEmitter>();
 
@@ -809,7 +772,7 @@ void MainComponent::getNextAudioBlock(const AudioSourceChannelInfo& bufferToFill
 
         for (int channel = 0; channel < channels; ++channel)
         {
-            Butterworth1Pole& lpf = *atmospheric_filters[channel].get();
+            NicDSP::Butterworth1Pole& lpf = *atmospheric_filters[channel].get();
             const float *read_pos = buffer->getReadPointer(channel, buffer_index);
             float *write_pos = buffer->getWritePointer(channel, buffer_index);
 

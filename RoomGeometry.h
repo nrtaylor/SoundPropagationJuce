@@ -139,7 +139,10 @@ private:
 
     template<bool capture_debug = false>
     float SimulateRayCasts(const Vector3D<float>& source, const Vector3D<float>& receiver) const;
+
+    template<bool capture_debug>
+    void CaptureDebug(const LineSegment& _line) const;
 };
 
-template float RoomGeometry::Simulate<0>(const Vector3D<float>& source, const Vector3D<float>& receiver, const SoundPropagation::MethodType method) const;
-template float RoomGeometry::Simulate<1>(const Vector3D<float>& source, const Vector3D<float>& receiver, const SoundPropagation::MethodType method) const;
+template float RoomGeometry::Simulate<false>(const Vector3D<float>& source, const Vector3D<float>& receiver, const SoundPropagation::MethodType method) const;
+template float RoomGeometry::Simulate<true>(const Vector3D<float>& source, const Vector3D<float>& receiver, const SoundPropagation::MethodType method) const;

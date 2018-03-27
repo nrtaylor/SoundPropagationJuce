@@ -146,7 +146,7 @@ MainComponent::MainComponent() :
         std::shared_ptr<RoomGeometry> room = std::make_shared<RoomGeometry>(RoomGeometry());        
         rooms.emplace_back(room);
         current_room = rooms.back();
-        combo_room.addItem("Empty", rooms.size());
+        combo_room.addItem("Empty", static_cast<int>(rooms.size()));
         combo_room.setSelectedId(1);
     }
     // Square
@@ -157,14 +157,14 @@ MainComponent::MainComponent() :
         room->AddWall({ 12.f, -8.f, 0.f }, { -12.f, -8.f, 0.f });
         room->AddWall({ -12.f, -8.f, 0.f }, { -12.f,  8.f, 0.f });
         rooms.emplace_back(room);
-        combo_room.addItem("Square", rooms.size());        
+        combo_room.addItem("Square", static_cast<int>(rooms.size()));
     }
     // Wall
     {
         std::shared_ptr<RoomGeometry> room = std::make_shared<RoomGeometry>(RoomGeometry());
         room->AddWall({ -1000.f, 0.f, 0.f }, { 1000, 0.f, 0.f });
         rooms.emplace_back(room);
-        combo_room.addItem("Wall", rooms.size());        
+        combo_room.addItem("Wall", static_cast<int>(rooms.size()));
     }
     // Slit
     {
@@ -172,7 +172,7 @@ MainComponent::MainComponent() :
         room->AddWall({ -16.f,  0.f, 0.f }, { -0.5f,  0.f, 0.f });
         room->AddWall({ 0.5f,  0.f, 0.f }, { 16.f, 0.f, 0.f });
         rooms.emplace_back(room);
-        combo_room.addItem("Slit", rooms.size());        
+        combo_room.addItem("Slit", static_cast<int>(rooms.size()));
     }
     // Two Slits
     {
@@ -181,7 +181,7 @@ MainComponent::MainComponent() :
         room->AddWall({ -5.5f,  0.f, 0.f }, { 5.5f, 0.f, 0.f });
         room->AddWall({ 6.5f,  0.f, 0.f }, { 18.f, 0.f, 0.f });
         rooms.emplace_back(room);
-        combo_room.addItem("Two Slits", rooms.size());
+        combo_room.addItem("Two Slits", static_cast<int>(rooms.size()));
     }
     // Room with opening
     {
@@ -192,7 +192,7 @@ MainComponent::MainComponent() :
         room->AddWall({ 12.f, -8.f, 0.f }, { -12.f, -6.5f, 0.f });
         room->AddWall({ -12.f, -6.5f, 0.f }, { -12.f,  6.5f, 0.f });
         rooms.emplace_back(room);
-        combo_room.addItem("Trap Room with Opening", rooms.size());
+        combo_room.addItem("Trap Room with Opening", static_cast<int>(rooms.size()));
     }
     // Small Obstructions
     {
@@ -200,7 +200,7 @@ MainComponent::MainComponent() :
         room->AddWall({ -3.f,  6.f, 0.f }, { 3.f,  6.f, 0.f });
         room->AddWall({ 3.f, -6.f, 0.f }, { -3.f, -8.f, 0.f });
         rooms.emplace_back(room);
-        combo_room.addItem("Two Small Obstructors", rooms.size());
+        combo_room.addItem("Two Small Obstructors", static_cast<int>(rooms.size()));
     }
 
     addAndMakeVisible(&combo_method);
@@ -244,10 +244,10 @@ namespace SoundBufferHelper
         if (reader != nullptr)
         {
             buffer.buffer = std::make_unique<AudioSampleBuffer>();
-            buffer.buffer->setSize(reader->numChannels, reader->lengthInSamples);
+            buffer.buffer->setSize(reader->numChannels, static_cast<int>(reader->lengthInSamples));
             reader->read(buffer.buffer.get(),
                 0,
-                reader->lengthInSamples,
+                static_cast<int>(reader->lengthInSamples),
                 0,
                 true,
                 true);
@@ -377,6 +377,7 @@ void MainComponent::resized()
 void MainComponent::prepareToPlay(int samplesPerBlockExpected,
     double sampleRate)
 {
+    (void)samplesPerBlockExpected;
     sample_rate = (float)sampleRate;
 }
 

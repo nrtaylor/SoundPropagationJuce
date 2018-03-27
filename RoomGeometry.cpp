@@ -38,7 +38,7 @@ float MovingEmitter::Gain(const int32 channel) const
 
 void MovingEmitter::Paint(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const
 {
-    const float min_extent = (float)jmin(_bounds.getWidth(), _bounds.getHeight());
+    const float min_extent = (float)std::min(_bounds.getWidth(), _bounds.getHeight());
     const Vector3D<float> center(min_extent / 2.f, min_extent / 2.f, 0.f);
 
     _g.setColour(Colour::fromRGB(0xFF, 0xFF, 0xFF));
@@ -70,7 +70,7 @@ void RayCastCollector::Paint(Graphics& _g, const Rectangle<int> _bounds, const f
     std::lock_guard<std::mutex> guard(collector_lock);
     if (ray_casts.size() > 0)
     {
-        const float min_extent = (float)jmin(_bounds.getWidth(), _bounds.getHeight());
+        const float min_extent = (float)std::min(_bounds.getWidth(), _bounds.getHeight());
         const Vector3D<float> center(min_extent / 2.f, min_extent / 2.f, 0.f);
         _g.setColour(Colour::fromRGB(0x0, 0xAA, 0xAA));
         for (const LineSegment line : ray_casts)
@@ -95,26 +95,26 @@ void RoomGeometry::AddWall(const Vector3D<float> start, const Vector3D<float> en
     if (walls.size() == 1)
     {
         bounding_box = LineSegment{
-            { jmin(start.x, end.x), jmin(start.y,end.y), 0.f },
-            { jmax(start.x, end.x), jmax(start.y,end.y), 0.f } };
+            { std::min(start.x, end.x), std::min(start.y,end.y), 0.f },
+            { std::max(start.x, end.x), std::max(start.y,end.y), 0.f } };
     }
     else
     {
-        if (jmin(start.x, end.x) < bounding_box.start.x)
+        if (std::min(start.x, end.x) < bounding_box.start.x)
         {
-            bounding_box.start.x = jmin(start.x, end.x);
+            bounding_box.start.x = std::min(start.x, end.x);
         }
-        if (jmax(start.x, end.x) > bounding_box.end.x)
+        if (std::max(start.x, end.x) > bounding_box.end.x)
         {
-            bounding_box.end.x = jmax(start.x, end.x);
+            bounding_box.end.x = std::max(start.x, end.x);
         }
-        if (jmin(start.y, end.y) < bounding_box.start.y)
+        if (std::min(start.y, end.y) < bounding_box.start.y)
         {
-            bounding_box.start.y = jmin(start.y, end.y);
+            bounding_box.start.y = std::min(start.y, end.y);
         }
-        if (jmax(start.y, end.y) > bounding_box.end.y)
+        if (std::max(start.y, end.y) > bounding_box.end.y)
         {
-            bounding_box.end.y = jmax(start.y, end.y);
+            bounding_box.end.y = std::max(start.y, end.y);
         }
     }
 }
@@ -145,19 +145,30 @@ void RoomGeometry::AssignCollector(std::unique_ptr<RayCastCollector>& collector)
     }
 }
 
-template<bool capture_debug>
-bool RoomGeometry::Intersects(const LineSegment& _line) const
+template<>
+void RoomGeometry::CaptureDebug<false>(const LineSegment& _line) const
 {
-    if (capture_debug &&
-        ray_cast_collector != nullptr)
+    (void)_line;
+}
+
+template<>
+void RoomGeometry::CaptureDebug<true>(const LineSegment& _line) const
+{
+    if (ray_cast_collector != nullptr)
     {
         ray_cast_collector->Add(_line);
     }
+}
 
-    if (jmin(_line.start.x, _line.end.x) > bounding_box.end.x ||
-        jmax(_line.start.x, _line.end.x) < bounding_box.start.x ||
-        jmin(_line.start.y, _line.end.y) > bounding_box.end.y ||
-        jmax(_line.start.y, _line.end.y) < bounding_box.start.y)
+template<bool capture_debug>
+bool RoomGeometry::Intersects(const LineSegment& _line) const
+{
+    CaptureDebug<capture_debug>(_line);
+
+    if (std::min(_line.start.x, _line.end.x) > bounding_box.end.x ||
+        std::max(_line.start.x, _line.end.x) < bounding_box.start.x ||
+        std::min(_line.start.y, _line.end.y) > bounding_box.end.y ||
+        std::max(_line.start.y, _line.end.y) < bounding_box.start.y)
     {
         return false;
     }
@@ -190,7 +201,7 @@ bool RoomGeometry::Intersects(const LineSegment& _line) const
 
 void RoomGeometry::Paint(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const
 {
-    const float min_extent = (float)jmin(_bounds.getWidth(), _bounds.getHeight());
+    const float min_extent = (float)std::min(_bounds.getWidth(), _bounds.getHeight());
     const Vector3D<float> center(min_extent / 2.f, min_extent / 2.f, 0.f);
 
     _g.setColour(Colour::fromRGB(0x77, 0x1c, 0x47));
@@ -222,7 +233,7 @@ float RoomGeometry::SimulateSpecularLOS(const Vector3D<float>& source, const Vec
     {
         return 1.f;
     }
-    const float geometric_attenuation = jmin(1.f, 1.f / distance);
+    const float geometric_attenuation = std::min(1.f, 1.f / distance);
     return geometric_attenuation;
 }
 
@@ -268,6 +279,6 @@ float RoomGeometry::SimulateRayCasts(const Vector3D<float>& source, const Vector
     {
         return 1.f;
     }
-    const float geometric_attenuation = jmin(1.f, 1.f / distance);
+    const float geometric_attenuation = std::min(1.f, 1.f / distance);
     return geometric_attenuation;
 }

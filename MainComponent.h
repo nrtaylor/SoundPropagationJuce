@@ -143,5 +143,9 @@ private:
 
     void timerCallback() override;
 
+    void PaintEmitter(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const;
+    void PaintRoom(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const;
+    void PaintRayCasts(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };

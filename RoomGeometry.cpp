@@ -4,14 +4,29 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
 
+namespace nMath
+{
+    inline float Min(float lhs, float rhs)
+    {
+        return (lhs < rhs) ? lhs : rhs;
+    }
+
+    inline float Max(float lhs, float rhs)
+    {
+        return (lhs > rhs) ? lhs : rhs;
+    }
+}
+
+typedef signed int int32; // TODO: PCH
+
 void MovingEmitter::Update(int32 _elapsedMs)
 {
     angle += 2 * (float)M_PI * (_elapsedMs * frequency) / 1000.f;
-    Vector3D<float> new_position(cosf(angle), sinf(angle), 0.f);
+    nMath::Vector new_position{ cosf(angle), sinf(angle), 0.f };
     pan_amount = new_position.x;
 
     const float emitter_radius = radius.load();
-    emitter.SetPosition(Vector3D<float>(new_position.x*emitter_radius, new_position.y*emitter_radius, 0.f));
+    emitter.SetPosition(nMath::Vector{ new_position.x*emitter_radius, new_position.y*emitter_radius, 0.f });
 }
 
 // gain left/right should be pulled out as a process
@@ -36,26 +51,13 @@ float MovingEmitter::Gain(const int32 channel) const
     }
 }
 
-void MovingEmitter::Paint(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const
-{
-    const float min_extent = (float)std::min(_bounds.getWidth(), _bounds.getHeight());
-    const Vector3D<float> center(min_extent / 2.f, min_extent / 2.f, 0.f);
-
-    _g.setColour(Colour::fromRGB(0xFF, 0xFF, 0xFF));
-    _g.fillEllipse(center.x - 1.f, center.y - 1.f, 2, 2);
-
-    const Vector3D<float>& emitter_pos = emitter.GetPosition();
-    Vector3D<float> emitter_draw_pos(emitter_pos.x * _zoom_factor + center.x, -emitter_pos.y * _zoom_factor + center.y, 0.f);
-    _g.fillEllipse(emitter_draw_pos.x - 1.f, emitter_draw_pos.y - 1.f, 2.5, 2.5);
-}
-
 void RayCastCollector::Start()
 {
     collector_lock.lock();
     ray_casts.clear();
 }
 
-void RayCastCollector::Add(const LineSegment& ray_cast)
+void RayCastCollector::Add(const nMath::LineSegment& ray_cast)
 {
     ray_casts.emplace_back(ray_cast);
 }
@@ -65,22 +67,10 @@ void RayCastCollector::Finished()
     collector_lock.unlock();
 }
 
-void RayCastCollector::Paint(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor)
+const std::vector<nMath::LineSegment>& RayCastCollector::RayCasts()
 {
-    std::lock_guard<std::mutex> guard(collector_lock);
-    if (ray_casts.size() > 0)
-    {
-        const float min_extent = (float)std::min(_bounds.getWidth(), _bounds.getHeight());
-        const Vector3D<float> center(min_extent / 2.f, min_extent / 2.f, 0.f);
-        _g.setColour(Colour::fromRGB(0x0, 0xAA, 0xAA));
-        for (const LineSegment line : ray_casts)
-        {
-            _g.drawLine((line.start.x * _zoom_factor) + center.x,
-                -(line.start.y * _zoom_factor) + center.y,
-                (line.end.x * _zoom_factor) + center.x,
-                -(line.end.y * _zoom_factor) + center.y);
-        }
-    }
+    collector_lock.lock();
+    return ray_casts;
 }
 
 RoomGeometry::RoomGeometry() :
@@ -89,38 +79,38 @@ RoomGeometry::RoomGeometry() :
     walls.reserve(4);
 }
 
-void RoomGeometry::AddWall(const Vector3D<float> start, const Vector3D<float> end)
+void RoomGeometry::AddWall(const nMath::Vector start, const nMath::Vector end)
 {
-    walls.emplace_back(LineSegment{ start, end });
+    walls.emplace_back(nMath::LineSegment{ start, end });
     if (walls.size() == 1)
     {
-        bounding_box = LineSegment{
-            { std::min(start.x, end.x), std::min(start.y,end.y), 0.f },
-            { std::max(start.x, end.x), std::max(start.y,end.y), 0.f } };
+        bounding_box = nMath::LineSegment{
+            { nMath::Min(start.x, end.x), nMath::Min(start.y,end.y), 0.f },
+            { nMath::Max(start.x, end.x), nMath::Max(start.y,end.y), 0.f } };
     }
     else
     {
-        if (std::min(start.x, end.x) < bounding_box.start.x)
+        if (nMath::Min(start.x, end.x) < bounding_box.start.x)
         {
-            bounding_box.start.x = std::min(start.x, end.x);
+            bounding_box.start.x = nMath::Min(start.x, end.x);
         }
-        if (std::max(start.x, end.x) > bounding_box.end.x)
+        if (nMath::Max(start.x, end.x) > bounding_box.end.x)
         {
-            bounding_box.end.x = std::max(start.x, end.x);
+            bounding_box.end.x = nMath::Max(start.x, end.x);
         }
-        if (std::min(start.y, end.y) < bounding_box.start.y)
+        if (nMath::Min(start.y, end.y) < bounding_box.start.y)
         {
-            bounding_box.start.y = std::min(start.y, end.y);
+            bounding_box.start.y = nMath::Min(start.y, end.y);
         }
-        if (std::max(start.y, end.y) > bounding_box.end.y)
+        if (nMath::Max(start.y, end.y) > bounding_box.end.y)
         {
-            bounding_box.end.y = std::max(start.y, end.y);
+            bounding_box.end.y = nMath::Max(start.y, end.y);
         }
     }
 }
 
 template<bool capture_debug>
-float RoomGeometry::Simulate(const Vector3D<float>& source, const Vector3D<float>& receiver, const SoundPropagation::MethodType method) const
+float RoomGeometry::Simulate(const nMath::Vector& source, const nMath::Vector& receiver, const SoundPropagation::MethodType method) const
 {
     switch (method)
     {
@@ -146,13 +136,13 @@ void RoomGeometry::AssignCollector(std::unique_ptr<RayCastCollector>& collector)
 }
 
 template<>
-void RoomGeometry::CaptureDebug<false>(const LineSegment& _line) const
+void RoomGeometry::CaptureDebug<false>(const nMath::LineSegment& _line) const
 {
     (void)_line;
 }
 
 template<>
-void RoomGeometry::CaptureDebug<true>(const LineSegment& _line) const
+void RoomGeometry::CaptureDebug<true>(const nMath::LineSegment& _line) const
 {
     if (ray_cast_collector != nullptr)
     {
@@ -161,22 +151,22 @@ void RoomGeometry::CaptureDebug<true>(const LineSegment& _line) const
 }
 
 template<bool capture_debug>
-bool RoomGeometry::Intersects(const LineSegment& _line) const
+bool RoomGeometry::Intersects(const nMath::LineSegment& _line) const
 {
     CaptureDebug<capture_debug>(_line);
 
-    if (std::min(_line.start.x, _line.end.x) > bounding_box.end.x ||
-        std::max(_line.start.x, _line.end.x) < bounding_box.start.x ||
-        std::min(_line.start.y, _line.end.y) > bounding_box.end.y ||
-        std::max(_line.start.y, _line.end.y) < bounding_box.start.y)
+    if (nMath::Min(_line.start.x, _line.end.x) > bounding_box.end.x ||
+        nMath::Max(_line.start.x, _line.end.x) < bounding_box.start.x ||
+        nMath::Min(_line.start.y, _line.end.y) > bounding_box.end.y ||
+        nMath::Max(_line.start.y, _line.end.y) < bounding_box.start.y)
     {
         return false;
     }
 
-    const Vector3D<float> line2 = _line.end - _line.start;
-    for (const LineSegment& wall : walls)
+    const nMath::Vector line2 = _line.end - _line.start;
+    for (const nMath::LineSegment& wall : walls)
     {
-        Vector3D<float> wall2 = wall.end - wall.start;
+        nMath::Vector wall2 = wall.end - wall.start;
         const float numerator = wall2.y * (_line.start.x - wall.start.x) - wall2.x * (_line.start.y - wall.start.y);
         const float denominator = line2.y * wall2.x - line2.x * wall2.y;
 
@@ -199,67 +189,48 @@ bool RoomGeometry::Intersects(const LineSegment& _line) const
     return false;
 }
 
-void RoomGeometry::Paint(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const
-{
-    const float min_extent = (float)std::min(_bounds.getWidth(), _bounds.getHeight());
-    const Vector3D<float> center(min_extent / 2.f, min_extent / 2.f, 0.f);
-
-    _g.setColour(Colour::fromRGB(0x77, 0x1c, 0x47));
-    Path room;
-    for (const LineSegment& wall : walls)
-    {
-        const Line<float> drawLine(
-            wall.start.x * _zoom_factor + center.x,
-            -wall.start.y * _zoom_factor + center.y,
-            wall.end.x * _zoom_factor + center.x,
-            -wall.end.y * _zoom_factor + center.y);
-        room.addLineSegment(drawLine, 2.f);
-    }
-    _g.fillPath(room);
-}
-
 template<bool capture_debug>
-float RoomGeometry::SimulateSpecularLOS(const Vector3D<float>& source, const Vector3D<float>& receiver) const
+float RoomGeometry::SimulateSpecularLOS(const nMath::Vector& source, const nMath::Vector& receiver) const
 {
-    if (Intersects<capture_debug>(LineSegment{ source, receiver }))
+    if (Intersects<capture_debug>(nMath::LineSegment{ source, receiver }))
     {
         return 0.f;
     }
 
     static const float near_field_distance = 0.75f; // around 440 hz
 
-    const float distance = (source - receiver).length();
+    const float distance = nMath::Length(source - receiver);
     if (distance < near_field_distance)
     {
         return 1.f;
     }
-    const float geometric_attenuation = std::min(1.f, 1.f / distance);
+    const float geometric_attenuation = nMath::Min(1.f, 1.f / distance);
     return geometric_attenuation;
 }
 
 template<bool capture_debug>
-float RoomGeometry::SimulateRayCasts(const Vector3D<float>& source, const Vector3D<float>& receiver) const
+float RoomGeometry::SimulateRayCasts(const nMath::Vector& source, const nMath::Vector& receiver) const
 {
-    Vector3D<float> direction = source - receiver;
-    float distance = direction.length();
-    if (Intersects<capture_debug>(LineSegment{ source, receiver }))
+    nMath::Vector direction = source - receiver;
+    float distance = nMath::Length(direction);
+    if (Intersects<capture_debug>(nMath::LineSegment{ source, receiver }))
     {
         if (distance > FLT_EPSILON)
         {
             direction = direction / distance;
-            Vector3D<float> ray_orth = { -direction.y, direction.x, 0.f };
-            Vector3D<float> ray_orth_inv = ray_orth * -1.f;
-            if ((!Intersects<capture_debug>(LineSegment{ ray_orth + receiver, receiver }) &&
-                !Intersects<capture_debug>(LineSegment{ ray_orth + receiver, source })) ||
-                (!Intersects<capture_debug>(LineSegment{ ray_orth_inv + receiver, receiver }) &&
-                    !Intersects<capture_debug>(LineSegment{ ray_orth_inv + receiver, source })))
+            nMath::Vector ray_orth = { -direction.y, direction.x, 0.f };
+            nMath::Vector ray_orth_inv = -1.f * ray_orth;
+            if ((!Intersects<capture_debug>(nMath::LineSegment{ ray_orth + receiver, receiver }) &&
+                !Intersects<capture_debug>(nMath::LineSegment{ ray_orth + receiver, source })) ||
+                (!Intersects<capture_debug>(nMath::LineSegment{ ray_orth_inv + receiver, receiver }) &&
+                    !Intersects<capture_debug>(nMath::LineSegment{ ray_orth_inv + receiver, source })))
             {
                 distance += 1.f;
             }
-            else if ((!Intersects<capture_debug>(LineSegment{ ray_orth + source, source }) &&
-                !Intersects<capture_debug>(LineSegment{ ray_orth + source, receiver })) ||
-                (!Intersects<capture_debug>(LineSegment{ ray_orth_inv + source, source }) &&
-                    !Intersects<capture_debug>(LineSegment{ ray_orth_inv + source, receiver })))
+            else if ((!Intersects<capture_debug>(nMath::LineSegment{ ray_orth + source, source }) &&
+                !Intersects<capture_debug>(nMath::LineSegment{ ray_orth + source, receiver })) ||
+                (!Intersects<capture_debug>(nMath::LineSegment{ ray_orth_inv + source, source }) &&
+                    !Intersects<capture_debug>(nMath::LineSegment{ ray_orth_inv + source, receiver })))
             {
                 distance += 1.f;
             }
@@ -279,6 +250,6 @@ float RoomGeometry::SimulateRayCasts(const Vector3D<float>& source, const Vector
     {
         return 1.f;
     }
-    const float geometric_attenuation = std::min(1.f, 1.f / distance);
+    const float geometric_attenuation = nMath::Min(1.f, 1.f / distance);
     return geometric_attenuation;
 }

@@ -2,13 +2,16 @@
 // Author - Nic Taylor
 #pragma once
 
-#include "../JuceLibraryCode/JuceHeader.h"
+#include "nVector.h"
+#include <atomic>
 #include <vector>
 #include <mutex>
 
+//typedef signed int int32; // TODO: Conflicts with Juce
+
 namespace SoundPropagation
 {
-    enum MethodType : int32
+    enum MethodType : signed int
     {
         Method_SpecularLOS = 1,
         Method_RayCasts,
@@ -18,29 +21,26 @@ namespace SoundPropagation
     };
 }
 
-struct LineSegment
-{
-    Vector3D<float> start;
-    Vector3D<float> end;
-};
-
 class SoundEmitter
 {
 public:
-    SoundEmitter() {}
+    SoundEmitter() 
+    {
+        position = { 0.f, 0.f, 0.f };
+    }
 
-    void SetPosition(const Vector3D<float>& _position)
+    void SetPosition(const nMath::Vector& _position)
     {
         position = _position;
     }
 
-    const Vector3D<float>& GetPosition() const
+    const nMath::Vector& GetPosition() const
     {
         return position;
     }
 
 private:
-    Vector3D<float> position;
+    nMath::Vector position;
 };
 
 class MovingEmitter
@@ -57,7 +57,7 @@ public:
         global_gain = 0.8f;
     }
 
-    const Vector3D<float> GetPosition() const
+    const nMath::Vector GetPosition() const
     {
         return emitter.GetPosition();
     }
@@ -77,13 +77,11 @@ public:
         radius.store(_radius);
     }
 
-    void Update(int32 _elapsedMs);
+    void Update(signed int _elapsedMs);
 
     void ComputeGain(const float new_gain);
 
-    float Gain(const int32 channel) const;
-
-    void Paint(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const;
+    float Gain(const signed int channel) const;
 
 private:
     std::atomic<float> frequency;
@@ -103,13 +101,13 @@ public:
 
     void Start();
 
-    void Add(const LineSegment& ray_cast);
+    void Add(const nMath::LineSegment& ray_cast);
 
     void Finished();
 
-    void Paint(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor);
+    const std::vector<nMath::LineSegment>& RayCasts(); // TODO: Clean-up locks
 private:
-    std::vector<LineSegment> ray_casts;
+    std::vector<nMath::LineSegment> ray_casts;
     std::mutex collector_lock;
 };
 
@@ -118,31 +116,35 @@ class RoomGeometry
 public:
     RoomGeometry();
 
-    void AddWall(const Vector3D<float> start, const Vector3D<float> end);
+    void AddWall(const nMath::Vector start, const nMath::Vector end);
 
     template<bool capture_debug = false>
-    float Simulate(const Vector3D<float>& source, const Vector3D<float>& receiver, const SoundPropagation::MethodType method) const;
+    float Simulate(const nMath::Vector& source, const nMath::Vector& receiver, const SoundPropagation::MethodType method) const;
 
     void AssignCollector(std::unique_ptr<RayCastCollector>& collector);
 
     template<bool capture_debug = false>
-    bool Intersects(const LineSegment& _line) const;
+    bool Intersects(const nMath::LineSegment& _line) const;
 
-    void Paint(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const;
+    const std::vector<nMath::LineSegment>& Walls() const // TODO: clean-up
+    { 
+        return walls; 
+    }
+
 private:
-    std::vector<LineSegment> walls;
-    LineSegment bounding_box;
+    std::vector<nMath::LineSegment> walls;
+    nMath::LineSegment bounding_box;
     std::unique_ptr<RayCastCollector> ray_cast_collector;
 
     template<bool capture_debug = false>
-    float SimulateSpecularLOS(const Vector3D<float>& source, const Vector3D<float>& receiver) const;
+    float SimulateSpecularLOS(const nMath::Vector& source, const nMath::Vector& receiver) const;
 
     template<bool capture_debug = false>
-    float SimulateRayCasts(const Vector3D<float>& source, const Vector3D<float>& receiver) const;
+    float SimulateRayCasts(const nMath::Vector& source, const nMath::Vector& receiver) const;
 
     template<bool capture_debug>
-    void CaptureDebug(const LineSegment& _line) const;
+    void CaptureDebug(const nMath::LineSegment& _line) const;
 };
 
-template float RoomGeometry::Simulate<false>(const Vector3D<float>& source, const Vector3D<float>& receiver, const SoundPropagation::MethodType method) const;
-template float RoomGeometry::Simulate<true>(const Vector3D<float>& source, const Vector3D<float>& receiver, const SoundPropagation::MethodType method) const;
+template float RoomGeometry::Simulate<false>(const nMath::Vector& source, const nMath::Vector& receiver, const SoundPropagation::MethodType method) const;
+template float RoomGeometry::Simulate<true>(const nMath::Vector& source, const nMath::Vector& receiver, const SoundPropagation::MethodType method) const;

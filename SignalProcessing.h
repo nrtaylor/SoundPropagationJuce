@@ -20,7 +20,7 @@ namespace NicDSP
             y1(0.0),
             bypass(false) {}
 
-        void Initialize(double cutoff_frequency, double sample_rate);
+        void Initialize(float cutoff_frequency, float sample_rate);
 
         float process(float x)
         {

@@ -332,17 +332,73 @@ void MainComponent::paint (Graphics& _g)
 
     const Rectangle<int> bounds = _g.getClipBounds();
     const float zoom_factor = 10.f;
+    PaintRoom(_g, bounds, zoom_factor);
+
+    if (show_ray_casts)
+    {
+        PaintRayCasts(_g, bounds, zoom_factor);
+    }
+
+    PaintEmitter(_g, bounds, zoom_factor);
+}
+
+void MainComponent::PaintEmitter(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const
+{
+    const float min_extent = (float)std::min(_bounds.getWidth(), _bounds.getHeight());
+    const nMath::Vector center{ min_extent / 2.f, min_extent / 2.f, 0.f };
+
+    _g.setColour(Colour::fromRGB(0xFF, 0xFF, 0xFF));
+    _g.fillEllipse(center.x - 1.f, center.y - 1.f, 2, 2);
+
+    const nMath::Vector emitter_pos = moving_emitter->GetPosition();
+    nMath::Vector emitter_draw_pos{ emitter_pos.x * _zoom_factor + center.x, -emitter_pos.y * _zoom_factor + center.y, 0.f };
+    _g.fillEllipse(emitter_draw_pos.x - 1.f, emitter_draw_pos.y - 1.f, 2.5, 2.5);
+}
+
+void MainComponent::PaintRoom(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const
+{
     std::shared_ptr<RoomGeometry> room = current_room;
     if (room != nullptr)
     {
-        room->Paint(_g, bounds, zoom_factor);
+        const float min_extent = (float)std::min(_bounds.getWidth(), _bounds.getHeight());
+        const nMath::Vector center{ min_extent / 2.f, min_extent / 2.f, 0.f };
+
+        _g.setColour(Colour::fromRGB(0x77, 0x1c, 0x47));
+        Path room_lines;
+        auto& walls = room->Walls();
+        for (const nMath::LineSegment& wall : walls)
+        {
+            const Line<float> drawLine(
+                wall.start.x * _zoom_factor + center.x,
+                -wall.start.y * _zoom_factor + center.y,
+                wall.end.x * _zoom_factor + center.x,
+                -wall.end.y * _zoom_factor + center.y);
+            room_lines.addLineSegment(drawLine, 2.f);
+        }
+        _g.fillPath(room_lines);
     }
-    if (show_ray_casts &&
-        ray_cast_collector != nullptr)
+}
+
+void MainComponent::PaintRayCasts(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const
+{
+    if (ray_cast_collector != nullptr)
     {
-        ray_cast_collector->Paint(_g, bounds, zoom_factor);
+        auto& ray_casts = ray_cast_collector->RayCasts();
+        if (ray_casts.size() > 0)
+        {
+            const float min_extent = (float)std::min(_bounds.getWidth(), _bounds.getHeight());
+            const nMath::Vector center{ min_extent / 2.f, min_extent / 2.f, 0.f };
+            _g.setColour(Colour::fromRGB(0x0, 0xAA, 0xAA));
+            for (const nMath::LineSegment line : ray_casts)
+            {
+                _g.drawLine((line.start.x * _zoom_factor) + center.x,
+                    -(line.start.y * _zoom_factor) + center.y,
+                    (line.end.x * _zoom_factor) + center.x,
+                    -(line.end.y * _zoom_factor) + center.y);
+            }
+        }
+        ray_cast_collector->Finished();
     }
-    moving_emitter->Paint(_g, bounds, zoom_factor);
 }
 
 void MainComponent::resized()
@@ -490,11 +546,11 @@ void MainComponent::update()
                 std::lock_guard<std::mutex> guard(mutex_image);
                 std::shared_ptr<const RoomGeometry> room = current_room;
                 const SoundPropagation::MethodType simulation_compare_to = current_compare_to_method.load();
-                const Vector3D<float> emitter_pos = moving_emitter->GetPosition();
-                const Vector3D<float> center(image_next.getWidth() / 2.f, image_next.getWidth() / 2.f, 0.f);
+                const nMath::Vector emitter_pos = moving_emitter->GetPosition();
+                const nMath::Vector center{ image_next.getWidth() / 2.f, image_next.getWidth() / 2.f, 0.f };
                 const float inv_zoom_factor = 1.f / 10.f;
 
-                const int extent = image_next.getWidth();                
+                const int extent = image_next.getWidth();
                 const Image::BitmapData bitmap(image_next, Image::BitmapData::writeOnly);
 
                 uint8* pixel = bitmap.getPixelPointer(0, 0);
@@ -502,7 +558,7 @@ void MainComponent::update()
                 {
                     for (int j = 0; j < extent; ++j)
                     {
-                        const Vector3D<float> pixel_to_world = { (j - center.x) * inv_zoom_factor,
+                        const nMath::Vector pixel_to_world = { (j - center.x) * inv_zoom_factor,
                                                            (i - center.y) * -inv_zoom_factor,
                                                             0.f };
                         float energy = room->Simulate(emitter_pos, pixel_to_world, simulation_method);

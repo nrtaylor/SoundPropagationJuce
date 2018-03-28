@@ -9,7 +9,7 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
 #include <atomic>
-#include "SignalProcessing.h"
+#include "nSignalProcessing.h"
 #include "RoomGeometry.h"
 
 namespace ImageHelper
@@ -128,9 +128,9 @@ MainComponent::MainComponent() :
     // you add any child components.
     setSize (800, 600);
 
-    atmospheric_filters[0] = std::make_unique<NicDSP::Butterworth1Pole>();
+    atmospheric_filters[0] = std::make_unique<nDSP::Butterworth1Pole>();
     atmospheric_filters[0]->bypass = true;
-    atmospheric_filters[1] = std::make_unique<NicDSP::Butterworth1Pole>();
+    atmospheric_filters[1] = std::make_unique<nDSP::Butterworth1Pole>();
     atmospheric_filters[1]->bypass = true;
     moving_emitter = std::make_unique<MovingEmitter>();
 
@@ -476,7 +476,7 @@ void MainComponent::getNextAudioBlock(const AudioSourceChannelInfo& bufferToFill
 
         for (int channel = 0; channel < channels; ++channel)
         {
-            NicDSP::Butterworth1Pole& lpf = *atmospheric_filters[channel].get();
+            nDSP::Butterworth1Pole& lpf = *atmospheric_filters[channel].get();
             const float *read_pos = buffer->getReadPointer(channel, buffer_index);
             float *write_pos = buffer->getWritePointer(channel, buffer_index);
 

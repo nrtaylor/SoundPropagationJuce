@@ -1,11 +1,11 @@
 // Signal Processing - simple DSP related structs and functions
 // Author - Nic Taylor
 
-#include "SignalProcessing.h"
+#include "nSignalProcessing.h"
 #define _USE_MATH_DEFINES
 #include <math.h>
 
-using namespace NicDSP;
+using namespace nDSP;
 
 void Butterworth1Pole::Initialize(float cutoff_frequency, float sample_rate)
 {

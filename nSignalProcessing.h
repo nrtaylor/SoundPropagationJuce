@@ -2,7 +2,7 @@
 // Author - Nic Taylor
 #pragma once
 
-namespace NicDSP
+namespace nDSP
 {
     struct Butterworth1Pole
     {

@@ -19,7 +19,7 @@ namespace nMath
 
 typedef signed int int32; // TODO: PCH
 
-void MovingEmitter::Update(int32 _elapsedMs)
+void MovingEmitter::Update(const signed int _elapsedMs)
 {
     angle += 2 * (float)M_PI * (_elapsedMs * frequency) / 1000.f;
     nMath::Vector new_position{ cosf(angle), sinf(angle), 0.f };
@@ -38,7 +38,7 @@ void MovingEmitter::ComputeGain(const float new_gain)
     gain_right.store(normed_loudness * sqrtf(1.f + pan_amount));
 }
 
-float MovingEmitter::Gain(const int32 channel) const
+float MovingEmitter::Gain(const signed int channel) const
 {
     switch (channel)
     {
@@ -51,9 +51,8 @@ float MovingEmitter::Gain(const int32 channel) const
     }
 }
 
-void RayCastCollector::Start()
-{
-    collector_lock.lock();
+void RayCastCollector::Reset()
+{    
     ray_casts.clear();
 }
 
@@ -62,14 +61,8 @@ void RayCastCollector::Add(const nMath::LineSegment& ray_cast)
     ray_casts.emplace_back(ray_cast);
 }
 
-void RayCastCollector::Finished()
+auto RayCastCollector::RayCasts() -> RayCastCollector::ConstRefLineSegments const
 {
-    collector_lock.unlock();
-}
-
-const std::vector<nMath::LineSegment>& RayCastCollector::RayCasts()
-{
-    collector_lock.lock();
     return ray_casts;
 }
 
@@ -127,7 +120,7 @@ void RoomGeometry::AssignCollector(std::unique_ptr<RayCastCollector>& collector)
 {
     if (collector != nullptr)
     {
-        ray_cast_collector = std::move(collector);
+        ray_cast_collector = std::move(collector);        
     }
     else if (ray_cast_collector != nullptr)
     {

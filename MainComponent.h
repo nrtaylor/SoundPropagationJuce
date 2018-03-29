@@ -90,6 +90,7 @@ private:
     std::vector<std::shared_ptr<RoomGeometry>> rooms;
     std::shared_ptr<RoomGeometry> current_room;
     std::unique_ptr<RayCastCollector> ray_cast_collector;
+    std::unique_ptr<std::mutex> mutex_ray_cast_collector;
     
     std::array<SoundBuffer, 2> test_buffers;
     std::atomic_uint32_t selected_test_buffer;

@@ -5,7 +5,6 @@
 #include "nVector.h"
 #include <atomic>
 #include <vector>
-#include <mutex>
 
 //typedef signed int int32; // TODO: Conflicts with Juce
 
@@ -77,7 +76,7 @@ public:
         radius.store(_radius);
     }
 
-    void Update(signed int _elapsedMs);
+    void Update(const signed int _elapsedMs);
 
     void ComputeGain(const float new_gain);
 
@@ -96,19 +95,18 @@ private:
 
 class RayCastCollector
 {
+private:
+    std::vector<nMath::LineSegment> ray_casts;
+
 public:
+    typedef std::add_const<std::add_lvalue_reference<decltype(ray_casts)>::type>::type ConstRefLineSegments;
     RayCastCollector() {}
 
-    void Start();
+    void Reset();
 
     void Add(const nMath::LineSegment& ray_cast);
 
-    void Finished();
-
-    const std::vector<nMath::LineSegment>& RayCasts(); // TODO: Clean-up locks
-private:
-    std::vector<nMath::LineSegment> ray_casts;
-    std::mutex collector_lock;
+    auto RayCasts() -> ConstRefLineSegments const;
 };
 
 class RoomGeometry

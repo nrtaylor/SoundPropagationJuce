@@ -21,6 +21,27 @@ namespace ImageHelper
     }
 }
 
+namespace SoundBufferHelper
+{
+    void LoadFromFile(SoundBuffer& buffer, AudioFormatManager& format_manager, const char* file_name)
+    {
+        File file = File::getCurrentWorkingDirectory().getChildFile(file_name);
+        std::unique_ptr<AudioFormatReader> reader(format_manager.createReaderFor(file));
+
+        if (reader != nullptr)
+        {
+            buffer.buffer = std::make_unique<AudioSampleBuffer>();
+            buffer.buffer->setSize(reader->numChannels, static_cast<int>(reader->lengthInSamples));
+            reader->read(buffer.buffer.get(),
+                0,
+                static_cast<int>(reader->lengthInSamples),
+                0,
+                true,
+                true);
+        }
+    }
+}
+
 //==============================================================================
 MainComponent::MainComponent() :
     initialized(false),
@@ -36,6 +57,7 @@ MainComponent::MainComponent() :
     flag_update_working = false;
 
     ray_cast_collector = std::make_unique<RayCastCollector>();
+    mutex_ray_cast_collector = std::make_unique<std::mutex>();
 
     setAudioChannels(0, 2);
     setWantsKeyboardFocus(true);
@@ -234,27 +256,6 @@ MainComponent::~MainComponent()
     shutdownAudio();
 }
 
-namespace SoundBufferHelper
-{
-    void LoadFromFile(SoundBuffer& buffer, AudioFormatManager& format_manager, const char* file_name)
-    {
-        File file = File::getCurrentWorkingDirectory().getChildFile(file_name);
-        std::unique_ptr<AudioFormatReader> reader(format_manager.createReaderFor(file));
-
-        if (reader != nullptr)
-        {
-            buffer.buffer = std::make_unique<AudioSampleBuffer>();
-            buffer.buffer->setSize(reader->numChannels, static_cast<int>(reader->lengthInSamples));
-            reader->read(buffer.buffer.get(),
-                0,
-                static_cast<int>(reader->lengthInSamples),
-                0,
-                true,
-                true);
-        }
-    }
-}
-
 //==============================================================================
 void MainComponent::initialise()
 {
@@ -383,6 +384,7 @@ void MainComponent::PaintRayCasts(Graphics& _g, const Rectangle<int> _bounds, co
 {
     if (ray_cast_collector != nullptr)
     {
+        std::lock_guard<std::mutex> guard(*mutex_ray_cast_collector);
         auto& ray_casts = ray_cast_collector->RayCasts();
         if (ray_casts.size() > 0)
         {
@@ -396,8 +398,7 @@ void MainComponent::PaintRayCasts(Graphics& _g, const Rectangle<int> _bounds, co
                     (line.end.x * _zoom_factor) + center.x,
                     -(line.end.y * _zoom_factor) + center.y);
             }
-        }
-        ray_cast_collector->Finished();
+        }        
     }
 }
 
@@ -518,15 +519,15 @@ void MainComponent::update()
         const bool ray_casts = show_ray_casts;
         if (ray_casts)
         {
-            ray_cast_collector->Start();
+            std::lock_guard<std::mutex> guard(*mutex_ray_cast_collector);
+            ray_cast_collector->Reset();
             room->AssignCollector(ray_cast_collector);
         }
         const float simulated_gain = room->Simulate<true>(moving_emitter->GetPosition(), { 0.f, 0.f, 0.f }, simulation_method);
         moving_emitter->ComputeGain(simulated_gain);
         if (ray_casts)
         {
-            room->AssignCollector(ray_cast_collector);
-            ray_cast_collector->Finished();
+            room->AssignCollector(ray_cast_collector);            
         }
     }
     

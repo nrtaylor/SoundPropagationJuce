@@ -26,9 +26,9 @@ nMath::Vector MovingEmitter::Update(const signed int _elapsedMs)
     pan_amount = new_position.x;
 
     const float emitter_radius = radius.load();
-    emitter.SetPosition(nMath::Vector{ new_position.x*emitter_radius, new_position.y*emitter_radius, 0.f });
+    emitter_pos = { new_position.x*emitter_radius, new_position.y*emitter_radius, 0.f };
 
-    return emitter.GetPosition();
+    return emitter_pos;
 }
 
 // gain left/right should be pulled out as a process

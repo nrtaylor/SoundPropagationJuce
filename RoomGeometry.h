@@ -21,28 +21,6 @@ namespace SoundPropagation
     };
 }
 
-class SoundEmitter
-{
-public:
-    SoundEmitter() 
-    {
-        position = { 0.f, 0.f, 0.f };
-    }
-
-    void SetPosition(const nMath::Vector& _position)
-    {
-        position = _position;
-    }
-
-    const nMath::Vector& GetPosition() const
-    {
-        return position;
-    }
-
-private:
-    nMath::Vector position;
-};
-
 class MovingEmitter
 {
 public:
@@ -55,13 +33,14 @@ public:
         gain_right = 0.f;
         pan_amount = 0.f;
         global_gain = 0.8f;
+        emitter_pos = { 0.f, 0.f, 0.f };
     }
 
     nMath::Vector Update(const signed int _elapsedMs);
 
     nMath::Vector GetPosition() const
     {
-        return emitter.GetPosition();
+        return emitter_pos;
     }
 
     // The following should be thread safe.
@@ -87,11 +66,12 @@ public:
 private:
     std::atomic<float> frequency;
     std::atomic<float> global_gain;
-    std::atomic<float> radius;
-    float angle;
+    std::atomic<float> radius;    
     std::atomic<float> gain_left;
     std::atomic<float> gain_right;
-    SoundEmitter emitter;
+
+    nMath::Vector emitter_pos;
+    float angle;
     float pan_amount;
 };
 

@@ -8,7 +8,6 @@
 #include "AtmosphericAbsorption.h"
 #define _USE_MATH_DEFINES
 #include <math.h>
-#include <atomic>
 #include "nSignalProcessing.h"
 #include "RoomGeometry.h"
 
@@ -510,7 +509,6 @@ void MainComponent::getNextAudioBlock(const AudioSourceChannelInfo& bufferToFill
             buffer_index = 0;
         }
     }
-
 }
 
 // Animated Component
@@ -601,7 +599,6 @@ void MainComponent::timerCallback()
 }
 
 // UI
-
 void MainComponent::sliderValueChanged(Slider* slider)
 {
     if (slider == &slider_gain)

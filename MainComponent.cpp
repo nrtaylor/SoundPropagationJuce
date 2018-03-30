@@ -59,6 +59,8 @@ MainComponent::MainComponent() :
     ray_cast_collector = std::make_unique<RayCastCollector>();
     mutex_ray_cast_collector = std::make_unique<std::mutex>();
 
+    mutex_emitter_update = std::make_unique<std::mutex>();
+
     setAudioChannels(0, 2);
     setWantsKeyboardFocus(true);
     
@@ -351,7 +353,11 @@ void MainComponent::PaintEmitter(Graphics& _g, const Rectangle<int> _bounds, con
     _g.setColour(Colour::fromRGB(0xFF, 0xFF, 0xFF));
     _g.fillEllipse(center.x - 1.f, center.y - 1.f, 2, 2);
 
-    const nMath::Vector emitter_pos = moving_emitter->GetPosition();
+    nMath::Vector emitter_pos;
+    {
+        std::lock_guard<std::mutex> guard(*mutex_emitter_update);
+        emitter_pos = moving_emitter->GetPosition();
+    }
     nMath::Vector emitter_draw_pos{ emitter_pos.x * _zoom_factor + center.x, -emitter_pos.y * _zoom_factor + center.y, 0.f };
     _g.fillEllipse(emitter_draw_pos.x - 1.f, emitter_draw_pos.y - 1.f, 2.5, 2.5);
 }
@@ -511,7 +517,11 @@ void MainComponent::getNextAudioBlock(const AudioSourceChannelInfo& bufferToFill
 void MainComponent::update()
 {
     int32 frame_time = Time::getMillisecondCounter();
-    moving_emitter->Update(frame_time - start_time);
+    nMath::Vector emitter_pos;
+    {
+        std::lock_guard<std::mutex> guard(*mutex_emitter_update);
+        emitter_pos = moving_emitter->Update(frame_time - start_time);
+    }    
     std::shared_ptr<RoomGeometry> room = current_room; // this isn't guarunteed atomic
     const SoundPropagation::MethodType simulation_method = current_method.load();
     if (room != nullptr)
@@ -521,13 +531,13 @@ void MainComponent::update()
         {
             std::lock_guard<std::mutex> guard(*mutex_ray_cast_collector);
             ray_cast_collector->Reset();
-            room->AssignCollector(ray_cast_collector);
+            room->SwapCollector(ray_cast_collector);
         }
-        const float simulated_gain = room->Simulate<true>(moving_emitter->GetPosition(), { 0.f, 0.f, 0.f }, simulation_method);
+        const float simulated_gain = room->Simulate<true>(emitter_pos, { 0.f, 0.f, 0.f }, simulation_method);
         moving_emitter->ComputeGain(simulated_gain);
         if (ray_casts)
         {
-            room->AssignCollector(ray_cast_collector);            
+            room->SwapCollector(ray_cast_collector);
         }
     }
     
@@ -543,11 +553,10 @@ void MainComponent::update()
                 image_next = ImageHelper::SquareImage(getBounds());
             }            
 
-            std::thread worker = std::thread([this, simulation_method] {
+            std::thread worker = std::thread([this, simulation_method, emitter_pos] {
                 std::lock_guard<std::mutex> guard(mutex_image);
                 std::shared_ptr<const RoomGeometry> room = current_room;
-                const SoundPropagation::MethodType simulation_compare_to = current_compare_to_method.load();
-                const nMath::Vector emitter_pos = moving_emitter->GetPosition();
+                const SoundPropagation::MethodType simulation_compare_to = current_compare_to_method.load();                
                 const nMath::Vector center{ image_next.getWidth() / 2.f, image_next.getWidth() / 2.f, 0.f };
                 const float inv_zoom_factor = 1.f / 10.f;
 

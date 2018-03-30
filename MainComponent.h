@@ -85,7 +85,8 @@ public:
 private:
     //==============================================================================
     AudioSourcePlayer audioSourcePlayer;
-    std::unique_ptr<MovingEmitter> moving_emitter;   
+    std::unique_ptr<MovingEmitter> moving_emitter;
+    std::unique_ptr<std::mutex> mutex_emitter_update;
     std::array<std::unique_ptr<nDSP::Butterworth1Pole>, 2> atmospheric_filters;
     std::vector<std::shared_ptr<RoomGeometry>> rooms;
     std::shared_ptr<RoomGeometry> current_room;

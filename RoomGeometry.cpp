@@ -19,7 +19,7 @@ namespace nMath
 
 typedef signed int int32; // TODO: PCH
 
-void MovingEmitter::Update(const signed int _elapsedMs)
+nMath::Vector MovingEmitter::Update(const signed int _elapsedMs)
 {
     angle += 2 * (float)M_PI * (_elapsedMs * frequency) / 1000.f;
     nMath::Vector new_position{ cosf(angle), sinf(angle), 0.f };
@@ -27,6 +27,8 @@ void MovingEmitter::Update(const signed int _elapsedMs)
 
     const float emitter_radius = radius.load();
     emitter.SetPosition(nMath::Vector{ new_position.x*emitter_radius, new_position.y*emitter_radius, 0.f });
+
+    return emitter.GetPosition();
 }
 
 // gain left/right should be pulled out as a process
@@ -116,16 +118,9 @@ float RoomGeometry::Simulate(const nMath::Vector& source, const nMath::Vector& r
     }
 }
 
-void RoomGeometry::AssignCollector(std::unique_ptr<RayCastCollector>& collector)
+void RoomGeometry::SwapCollector(std::unique_ptr<RayCastCollector>& collector)
 {
-    if (collector != nullptr)
-    {
-        ray_cast_collector = std::move(collector);        
-    }
-    else if (ray_cast_collector != nullptr)
-    {
-        collector = std::move(ray_cast_collector);
-    }
+    std::swap(ray_cast_collector, collector);
 }
 
 template<>

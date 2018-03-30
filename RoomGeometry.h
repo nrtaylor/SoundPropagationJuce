@@ -4,6 +4,7 @@
 
 #include "nVector.h"
 #include <atomic>
+#include <memory>
 #include <vector>
 
 //typedef signed int int32; // TODO: Conflicts with Juce
@@ -56,11 +57,14 @@ public:
         global_gain = 0.8f;
     }
 
-    const nMath::Vector GetPosition() const
+    nMath::Vector Update(const signed int _elapsedMs);
+
+    nMath::Vector GetPosition() const
     {
         return emitter.GetPosition();
     }
 
+    // The following should be thread safe.
     void SetFrequency(const float& _frequency)
     {
         frequency.store(_frequency);
@@ -74,9 +78,7 @@ public:
     void SetRadius(const float& _radius)
     {
         radius.store(_radius);
-    }
-
-    void Update(const signed int _elapsedMs);
+    }    
 
     void ComputeGain(const float new_gain);
 
@@ -111,7 +113,13 @@ public:
 
 class RoomGeometry
 {
+private:
+    std::vector<nMath::LineSegment> walls;
+    nMath::LineSegment bounding_box;
+    std::unique_ptr<RayCastCollector> ray_cast_collector;
+
 public:
+    typedef std::add_const<std::add_lvalue_reference<decltype(walls)>::type>::type ConstRefLineSegments;
     RoomGeometry();
 
     void AddWall(const nMath::Vector start, const nMath::Vector end);
@@ -119,21 +127,17 @@ public:
     template<bool capture_debug = false>
     float Simulate(const nMath::Vector& source, const nMath::Vector& receiver, const SoundPropagation::MethodType method) const;
 
-    void AssignCollector(std::unique_ptr<RayCastCollector>& collector);
-
     template<bool capture_debug = false>
     bool Intersects(const nMath::LineSegment& _line) const;
 
-    const std::vector<nMath::LineSegment>& Walls() const // TODO: clean-up
+    auto Walls() -> ConstRefLineSegments const
     { 
         return walls; 
     }
 
-private:
-    std::vector<nMath::LineSegment> walls;
-    nMath::LineSegment bounding_box;
-    std::unique_ptr<RayCastCollector> ray_cast_collector;
+    void SwapCollector(std::unique_ptr<RayCastCollector>& collector);
 
+private:
     template<bool capture_debug = false>
     float SimulateSpecularLOS(const nMath::Vector& source, const nMath::Vector& receiver) const;
 

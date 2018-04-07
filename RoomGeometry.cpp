@@ -3,15 +3,18 @@
 #include "RoomGeometry.h"
 #define _USE_MATH_DEFINES
 #include <math.h>
+#include <array>
 
 namespace nMath
 {
-    inline float Min(float lhs, float rhs)
+    template <typename T>
+    inline T Min(T lhs, T rhs)
     {
         return (lhs < rhs) ? lhs : rhs;
     }
 
-    inline float Max(float lhs, float rhs)
+    template <typename T>
+    inline T Max(T lhs, T rhs)
     {
         return (lhs > rhs) ? lhs : rhs;
     }
@@ -72,6 +75,9 @@ RoomGeometry::RoomGeometry() :
         bounding_box{ {},{} }
 {
     walls.reserve(4);
+
+    grid = std::make_unique<GeometryGrid>();
+    std::fill_n(&(*grid)[0][0], GridResolution * GridResolution, false);
 }
 
 void RoomGeometry::AddWall(const nMath::Vector start, const nMath::Vector end)
@@ -102,6 +108,41 @@ void RoomGeometry::AddWall(const nMath::Vector start, const nMath::Vector end)
             bounding_box.end.y = nMath::Max(start.y, end.y);
         }
     }
+
+    // Update Grid
+    if (fabsf(end.x - start.x) > fabsf(end.y - start.y))
+    {
+        const int grid_half = (int)GridResolution / 2;
+        nMath::LineSegment grid_line{ 
+            start + nMath::Vector{(float)grid_half, (float)grid_half},
+            end + nMath::Vector{ (float)grid_half, (float)grid_half }
+        };
+        if (end.x < start.x)
+        {
+            std::swap(grid_line.start, grid_line.end);
+        }
+
+        const int grid_start = nMath::Max(0, (int)grid_line.start.x);
+        const int grid_end = nMath::Min((int)GridResolution, 1 + (int)ceilf(grid_line.end.x));
+
+        const float inv_delta = 1.f / (grid_line.start.x - grid_line.end.x);
+        
+        int prev_grid_y = -1;
+        for (int i = grid_start; i <= grid_end; ++i)
+        {
+            const float t = ((float)i - grid_line.end.x) * inv_delta;
+            const float y = grid_line.start.y * t + (1.f - t) * grid_line.end.y;
+            const int grid_y = nMath::Min<int>(nMath::Max(0,(int)y), (int)GridResolution - 1);
+            if (prev_grid_y >= 0)
+            {
+                for (int j = nMath::Min(prev_grid_y, grid_y); j <= nMath::Max(prev_grid_y, grid_y); ++j)
+                {
+                    (*grid)[j][i - 1] = true;
+                }
+            }
+            prev_grid_y = grid_y;
+        }
+    }
 }
 
 template<bool capture_debug>
@@ -113,6 +154,8 @@ float RoomGeometry::Simulate(const nMath::Vector& source, const nMath::Vector& r
         return SimulateSpecularLOS<capture_debug>(source, receiver);
     case SoundPropagation::Method_RayCasts:
         return SimulateRayCasts<capture_debug>(source, receiver);
+    case SoundPropagation::Method_Pathfinding:
+        return SimulateAStar<capture_debug>(source, receiver);
     default:
         return 0.f;
     }
@@ -240,4 +283,12 @@ float RoomGeometry::SimulateRayCasts(const nMath::Vector& source, const nMath::V
     }
     const float geometric_attenuation = nMath::Min(1.f, 1.f / distance);
     return geometric_attenuation;
+}
+
+template<bool capture_debug>
+float RoomGeometry::SimulateAStar(const nMath::Vector& source, const nMath::Vector& receiver) const
+{
+    (void)source;
+    (void)receiver;
+    return 0.f;
 }

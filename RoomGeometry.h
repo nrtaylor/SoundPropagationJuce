@@ -93,11 +93,15 @@ public:
 
 class RoomGeometry
 {
+public:
+    const static uint32_t GridResolution = 60; // meters    
+    typedef std::array<std::array<bool, GridResolution>, GridResolution> GeometryGrid;
 private:
     std::vector<nMath::LineSegment> walls;
     nMath::LineSegment bounding_box;
     std::unique_ptr<RayCastCollector> ray_cast_collector;
 
+    std::unique_ptr<GeometryGrid> grid;
 public:
     typedef std::add_const<std::add_lvalue_reference<decltype(walls)>::type>::type ConstRefLineSegments;
     RoomGeometry();
@@ -117,12 +121,20 @@ public:
 
     void SwapCollector(std::unique_ptr<RayCastCollector>& collector);
 
+    const std::unique_ptr<GeometryGrid>& Grid() const
+    {
+        return grid;
+    }
+
 private:
     template<bool capture_debug = false>
     float SimulateSpecularLOS(const nMath::Vector& source, const nMath::Vector& receiver) const;
 
     template<bool capture_debug = false>
     float SimulateRayCasts(const nMath::Vector& source, const nMath::Vector& receiver) const;
+
+    template<bool capture_debug = false>
+    float SimulateAStar(const nMath::Vector& source, const nMath::Vector& receiver) const;
 
     template<bool capture_debug>
     void CaptureDebug(const nMath::LineSegment& _line) const;

@@ -230,6 +230,7 @@ MainComponent::MainComponent() :
     combo_method.addListener(this);
     combo_method.addItem("Specular (LOS)", SoundPropagation::Method_SpecularLOS);
     combo_method.addItem("Ray Casts", SoundPropagation::Method_RayCasts);
+    combo_method.addItem("A*", SoundPropagation::Method_Pathfinding);
     current_method = SoundPropagation::Method_SpecularLOS;
     combo_method.setSelectedId(SoundPropagation::Method_SpecularLOS);
 
@@ -242,6 +243,7 @@ MainComponent::MainComponent() :
     combo_compare_to_method.addItem("Off", SoundPropagation::Method_Off);
     combo_compare_to_method.addItem("Specular (LOS)", SoundPropagation::Method_SpecularLOS);
     combo_compare_to_method.addItem("Ray Casts", SoundPropagation::Method_RayCasts);
+    combo_compare_to_method.addItem("A*", SoundPropagation::Method_Pathfinding);
     current_compare_to_method = SoundPropagation::Method_Off;
     combo_compare_to_method.setSelectedId(SoundPropagation::Method_Off);
 
@@ -382,6 +384,23 @@ void MainComponent::PaintRoom(Graphics& _g, const Rectangle<int> _bounds, const 
             room_lines.addLineSegment(drawLine, 2.f);
         }
         _g.fillPath(room_lines);
+
+        const std::unique_ptr<RoomGeometry::GeometryGrid>& grid = room->Grid();
+        if (grid != nullptr)
+        {
+            _g.setColour(Colour::fromRGBA(0x77, 0x77, 0x77, 0x88));
+            int offset = (int)(min_extent/2.f - _zoom_factor * RoomGeometry::GridResolution / 2);
+            for (int i = 0; i < RoomGeometry::GridResolution; ++i)
+            {
+                for (int j = 0; j < RoomGeometry::GridResolution; ++j)
+                {
+                    if (bool value = (*grid)[i][j])
+                    {
+                        _g.fillRect(10 * j + offset + 1, 10 * (RoomGeometry::GridResolution - i) + offset - 1, 8, 8);
+                    }
+                }
+            }
+        }
     }
 }
 

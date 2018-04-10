@@ -110,13 +110,14 @@ void RoomGeometry::AddWall(const nMath::Vector start, const nMath::Vector end)
     }
 
     // Update Grid
+    const int grid_half = (int)GridResolution / 2;
+    nMath::LineSegment grid_line{
+        start + nMath::Vector{ (float)grid_half, (float)grid_half },
+        end + nMath::Vector{ (float)grid_half, (float)grid_half }
+    };
+
     if (fabsf(end.x - start.x) > fabsf(end.y - start.y))
     {
-        const int grid_half = (int)GridResolution / 2;
-        nMath::LineSegment grid_line{ 
-            start + nMath::Vector{(float)grid_half, (float)grid_half},
-            end + nMath::Vector{ (float)grid_half, (float)grid_half }
-        };
         if (end.x < start.x)
         {
             std::swap(grid_line.start, grid_line.end);
@@ -130,7 +131,8 @@ void RoomGeometry::AddWall(const nMath::Vector start, const nMath::Vector end)
         int prev_grid_y = -1;
         for (int i = grid_start; i <= grid_end; ++i)
         {
-            const float t = ((float)i - grid_line.end.x) * inv_delta;
+            float t = ((float)i - grid_line.end.x) * inv_delta;
+            t = nMath::Max(0.f, nMath::Min(1.f, t)); // end points
             const float y = grid_line.end.y + t * (grid_line.start.y - grid_line.end.y); // prevent rounding error when start.y == end.y
             const int grid_y = nMath::Min<int>(nMath::Max(0,(int)y), (int)GridResolution - 1);
             if (prev_grid_y >= 0)
@@ -141,6 +143,35 @@ void RoomGeometry::AddWall(const nMath::Vector start, const nMath::Vector end)
                 }
             }
             prev_grid_y = grid_y;
+        }
+    }
+    else
+    {
+        if (end.y < start.y)
+        {
+            std::swap(grid_line.start, grid_line.end);
+        }
+
+        const int grid_start = nMath::Max(0, (int)grid_line.start.y);
+        const int grid_end = nMath::Min((int)GridResolution, (int)ceilf(grid_line.end.y));
+
+        const float inv_delta = 1.f / (grid_line.start.y - grid_line.end.y);
+
+        int prev_grid_x = -1;
+        for (int i = grid_start; i <= grid_end; ++i)
+        {
+            float t = ((float)i - grid_line.end.y) * inv_delta;
+            t = nMath::Max(0.f, nMath::Min(1.f, t)); // end points
+            const float x = grid_line.end.x + t * (grid_line.start.x - grid_line.end.x); // prevent rounding error when start.y == end.y
+            const int grid_x = nMath::Min<int>(nMath::Max(0, (int)x), (int)GridResolution - 1);
+            if (prev_grid_x >= 0)
+            {
+                for (int j = nMath::Min(prev_grid_x, grid_x); j <= nMath::Max(prev_grid_x, grid_x); ++j)
+                {
+                    (*grid)[i - 1][j] = true;
+                }
+            }
+            prev_grid_x = grid_x;
         }
     }
 }

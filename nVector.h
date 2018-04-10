@@ -39,6 +39,12 @@ namespace nMath
         return cv;
     }
 
+    inline Vector operator* (const Vector& v, float c)
+    {
+        Vector cv = { c*v.x, c*v.y, c*v.z };
+        return cv;
+    }
+
     inline Vector operator/ (const Vector& v, float c)
     {
         Vector cv = { v.x / c, v.y / c, v.z / c };

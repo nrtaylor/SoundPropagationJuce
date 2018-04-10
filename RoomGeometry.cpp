@@ -112,8 +112,8 @@ void RoomGeometry::AddWall(const nMath::Vector start, const nMath::Vector end)
     // Update Grid
     const int grid_half = (int)GridResolution / 2;
     nMath::LineSegment grid_line{
-        start + nMath::Vector{ (float)grid_half, (float)grid_half },
-        end + nMath::Vector{ (float)grid_half, (float)grid_half }
+        start * (float)GridCellsPerMeter + nMath::Vector{ (float)grid_half, (float)grid_half },
+        end * (float)GridCellsPerMeter + nMath::Vector{ (float)grid_half, (float)grid_half }
     };
 
     if (fabsf(end.x - start.x) > fabsf(end.y - start.y))

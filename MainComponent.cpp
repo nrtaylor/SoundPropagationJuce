@@ -388,15 +388,20 @@ void MainComponent::PaintRoom(Graphics& _g, const Rectangle<int> _bounds, const 
         const std::unique_ptr<RoomGeometry::GeometryGrid>& grid = room->Grid();
         if (grid != nullptr)
         {
-            _g.setColour(Colour::fromRGBA(0x77, 0x77, 0x77, 0x88));
-            int offset = (int)(min_extent/2.f - _zoom_factor * RoomGeometry::GridResolution / 2);
+            _g.setColour(Colour::fromRGBA(0x77, 0x77, 0x77, 0x99));
+            int offset = (int)(min_extent/2.f - _zoom_factor * RoomGeometry::GridDistance / 2);
+            int cellSize = 10 / RoomGeometry::GridCellsPerMeter;
             for (int i = 0; i < RoomGeometry::GridResolution; ++i)
             {
                 for (int j = 0; j < RoomGeometry::GridResolution; ++j)
                 {
                     if (bool value = (*grid)[i][j])
                     {
-                        _g.fillRect(10 * j + offset + 1, 10 * (RoomGeometry::GridResolution - i - 1) + offset - 1, 8, 8);
+                        _g.fillRect(
+                            cellSize * j + offset + 1,
+                            cellSize * (RoomGeometry::GridResolution - i - 1) + offset - 1,
+                            cellSize - 1,
+                            cellSize - 1);
                     }
                 }
             }

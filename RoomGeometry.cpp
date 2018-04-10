@@ -123,7 +123,7 @@ void RoomGeometry::AddWall(const nMath::Vector start, const nMath::Vector end)
         }
 
         const int grid_start = nMath::Max(0, (int)grid_line.start.x);
-        const int grid_end = nMath::Min((int)GridResolution, 1 + (int)ceilf(grid_line.end.x));
+        const int grid_end = nMath::Min((int)GridResolution, (int)ceilf(grid_line.end.x));
 
         const float inv_delta = 1.f / (grid_line.start.x - grid_line.end.x);
         
@@ -131,7 +131,7 @@ void RoomGeometry::AddWall(const nMath::Vector start, const nMath::Vector end)
         for (int i = grid_start; i <= grid_end; ++i)
         {
             const float t = ((float)i - grid_line.end.x) * inv_delta;
-            const float y = grid_line.start.y * t + (1.f - t) * grid_line.end.y;
+            const float y = grid_line.end.y + t * (grid_line.start.y - grid_line.end.y); // prevent rounding error when start.y == end.y
             const int grid_y = nMath::Min<int>(nMath::Max(0,(int)y), (int)GridResolution - 1);
             if (prev_grid_y >= 0)
             {

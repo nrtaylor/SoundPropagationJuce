@@ -396,7 +396,7 @@ void MainComponent::PaintRoom(Graphics& _g, const Rectangle<int> _bounds, const 
                 {
                     if (bool value = (*grid)[i][j])
                     {
-                        _g.fillRect(10 * j + offset + 1, 10 * (RoomGeometry::GridResolution - i) + offset - 1, 8, 8);
+                        _g.fillRect(10 * j + offset + 1, 10 * (RoomGeometry::GridResolution - i - 1) + offset - 1, 8, 8);
                     }
                 }
             }

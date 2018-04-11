@@ -118,6 +118,7 @@ private:
     Image image_next;
     std::atomic_bool show_spl;
     std::atomic_bool show_ray_casts;
+    std::atomic_bool show_grid;
     std::mutex mutex_image;
     std::atomic_bool flag_refresh_image;
     std::atomic_bool flag_update_working;
@@ -130,6 +131,7 @@ private:
     Label label_radius;
     ToggleButton button_show_spl;
     ToggleButton button_show_ray_casts;
+    ToggleButton button_show_grid;
 
     Slider slider_spl_freq;
     Label label_spl_freq;

@@ -94,7 +94,9 @@ public:
 class RoomGeometry
 {
 public:
-    const static uint32_t GridResolution = 60; // meters    
+    const static uint32_t GridDistance = 60; // meters    
+    const static uint32_t GridCellsPerMeter = 2;
+    const static uint32_t GridResolution = GridCellsPerMeter * GridDistance;
     typedef std::array<std::array<bool, GridResolution>, GridResolution> GeometryGrid;
 private:
     std::vector<nMath::LineSegment> walls;

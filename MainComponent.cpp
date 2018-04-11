@@ -52,6 +52,7 @@ MainComponent::MainComponent() :
 
     show_spl = false;
     show_ray_casts = false;
+    show_grid = false;
     flag_refresh_image = false;
     flag_update_working = false;
 
@@ -101,6 +102,10 @@ MainComponent::MainComponent() :
     addAndMakeVisible(&button_show_ray_casts);
     button_show_ray_casts.setButtonText("Ray Casts");
     button_show_ray_casts.addListener(this);
+
+    addAndMakeVisible(&button_show_grid);
+    button_show_grid.setButtonText("Draw Grid");
+    button_show_grid.addListener(this);
 
     addAndMakeVisible(&slider_spl_freq);
     slider_spl_freq.setRange(20.0, 20000.0, 0.5);
@@ -224,6 +229,18 @@ MainComponent::MainComponent() :
         room->AddWall({ 3.f, -6.f, 0.f }, { -3.f, -8.f, 0.f });
         rooms.emplace_back(room);
         combo_room.addItem("Two Small Obstructors", static_cast<int>(rooms.size()));
+    }
+    // Misc
+    {
+        std::shared_ptr<RoomGeometry> room = std::make_shared<RoomGeometry>(RoomGeometry());
+        room->AddWall({ -14.75f,  -14.f, 0.f }, { -13.f,  0.f, 0.f });
+        room->AddWall({ 3.75f, -6.5f, 0.f }, { -3.f, -8.f, 0.f });
+        room->AddWall({ -0.8f, 10.f, 0.f }, { 1.5f, 7.3f, 0.f });
+        room->AddWall({ 9.f, -1.f, 0.f }, { 7.3f, 2.5f, 0.f });
+        room->AddWall({ -1, -10.f, 0.f }, { 5.5f, 7.3f, 0.f });
+        room->AddWall({ -10, -12.5f, 0.f }, { 10.f, -12.5f, 0.f });
+        rooms.emplace_back(room);
+        combo_room.addItem("Misc.", static_cast<int>(rooms.size()));
     }
 
     addAndMakeVisible(&combo_method);
@@ -385,23 +402,26 @@ void MainComponent::PaintRoom(Graphics& _g, const Rectangle<int> _bounds, const 
         }
         _g.fillPath(room_lines);
 
-        const std::unique_ptr<RoomGeometry::GeometryGrid>& grid = room->Grid();
-        if (grid != nullptr)
+        if (show_grid.load())
         {
-            _g.setColour(Colour::fromRGBA(0x77, 0x77, 0x77, 0x99));
-            int offset = (int)(min_extent/2.f - _zoom_factor * RoomGeometry::GridDistance / 2);
-            int cellSize = 10 / RoomGeometry::GridCellsPerMeter;
-            for (int i = 0; i < RoomGeometry::GridResolution; ++i)
+            const std::unique_ptr<RoomGeometry::GeometryGrid>& grid = room->Grid();
+            if (grid != nullptr)
             {
-                for (int j = 0; j < RoomGeometry::GridResolution; ++j)
+                _g.setColour(Colour::fromRGBA(0x77, 0x77, 0x77, 0x99));
+                int offset = (int)(min_extent / 2.f - _zoom_factor * RoomGeometry::GridDistance / 2);
+                int cellSize = 10 / RoomGeometry::GridCellsPerMeter;
+                for (int i = 0; i < RoomGeometry::GridResolution; ++i)
                 {
-                    if (bool value = (*grid)[i][j])
+                    for (int j = 0; j < RoomGeometry::GridResolution; ++j)
                     {
-                        _g.fillRect(
-                            cellSize * j + offset + 1,
-                            cellSize * (RoomGeometry::GridResolution - i - 1) + offset - 1,
-                            cellSize - 1,
-                            cellSize - 1);
+                        if (bool value = (*grid)[i][j])
+                        {
+                            _g.fillRect(
+                                cellSize * j + offset + 1,
+                                cellSize * (RoomGeometry::GridResolution - i - 1) + offset - 1,
+                                cellSize - 1,
+                                cellSize - 1);
+                        }
                     }
                 }
             }
@@ -455,8 +475,9 @@ void MainComponent::resized()
     slider_radius.setBounds(new_width - 202, 200 + 46, 200, 20);
     button_show_spl.setBounds(new_width - 202, 200 + 68, 200, 20);
     button_show_ray_casts.setBounds(new_width - 104, 200 + 68, 200, 20);
-    slider_spl_freq.setBounds(new_width - 202, 200 + 90, 200, 20);
-    group_atmosphere.setBounds(new_width - 244, 200 + 120, 238, 116);
+    button_show_grid.setBounds(new_width - 202, 200 + 90, 200, 20);
+    slider_spl_freq.setBounds(new_width - 202, 200 + 112, 200, 20);
+    group_atmosphere.setBounds(new_width - 244, 200 + 142, 238, 116);
 }
 
 // Audio Component
@@ -666,6 +687,10 @@ void MainComponent::buttonClicked(Button* buttonClicked)
     else if (buttonClicked == &button_show_ray_casts)
     {
         show_ray_casts = button_show_ray_casts.getToggleState();
+    }
+    else if (buttonClicked == &button_show_grid)
+    {
+        show_grid = button_show_grid.getToggleState();
     }
 }
 

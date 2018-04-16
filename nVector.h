@@ -60,4 +60,13 @@ namespace nMath
     {
         return sqrtf(Dot(v, v));
     }
+
+    inline Vector Rotate2D(const Vector& v, const float angle_rads)
+    {
+        return Vector{
+            cosf(angle_rads) * v.x - sinf(angle_rads) * v.y,
+            sinf(angle_rads) * v.x + cosf(angle_rads) * v.y,
+            v.z
+        };
+    }
 }

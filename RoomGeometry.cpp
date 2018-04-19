@@ -225,26 +225,11 @@ bool RoomGeometry::Intersects(const nMath::LineSegment& _line) const
         return false;
     }
 
-    const nMath::Vector line2 = _line.end - _line.start;
     for (const nMath::LineSegment& wall : walls)
     {
-        nMath::Vector wall2 = wall.end - wall.start;
-        const float numerator = wall2.y * (_line.start.x - wall.start.x) - wall2.x * (_line.start.y - wall.start.y);
-        const float denominator = line2.y * wall2.x - line2.x * wall2.y;
-
-        if (denominator != 0.f)
+        if (nMath::Intersect2D(wall, _line))
         {
-            float r = numerator / denominator;
-            if (r >= 0.f && r <= 1.f)
-            {
-                const float numerator2 = line2.y * (wall.start.x - _line.start.x) - line2.x * (wall.start.y - _line.start.y);
-                const float denominator2 = wall2.y * line2.x - wall2.x * line2.y;
-                r = numerator2 / denominator2;
-                if (r >= 0.f && r <= 1.f)
-                {
-                    return true;
-                }
-            }
+            return true;
         }
     }
 

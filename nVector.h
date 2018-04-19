@@ -69,4 +69,33 @@ namespace nMath
             v.z
         };
     }
+
+    inline bool Intersect2D(const LineSegment& v, const LineSegment& test)
+    {
+        const nMath::Vector test_dir = test.end - test.start;
+        const nMath::Vector v_dir = v.end - v.start;
+
+        const float numerator = v_dir.y * (test.start.x - v.start.x) - v_dir.x * (test.start.y - v.start.y);
+        const float denominator = test_dir.y * v_dir.x - test_dir.x * v_dir.y;
+
+        if (denominator != 0.f)
+        {
+            float r = numerator / denominator;
+            if (r >= 0.f && r <= 1.f)
+            {
+                //const float numerator2 = test_dir.y * (v.start.x - test.start.x) - test_dir.x * (v.start.y - test.start.y);
+                //const float denominator2 = v_dir.y * test_dir.x - v_dir.x * test_dir.y;
+                //const float r2 = (test.start.x - v.start.x + r * test_dir.x) / v_dir.x;
+                const float numerator2 = test_dir.x * (v.start.y - test.start.y) - test_dir.y * (v.start.x - test.start.x);
+                const float denominator2 = denominator;
+                r = numerator2 / denominator2;
+
+                if (r >= 0.f && r <= 1.f)
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
 }

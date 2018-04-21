@@ -5,6 +5,18 @@
 
 namespace nMath
 {
+    template <typename T>
+    inline T Min(T lhs, T rhs)
+    {
+        return (lhs < rhs) ? lhs : rhs;
+    }
+
+    template <typename T>
+    inline T Max(T lhs, T rhs)
+    {
+        return (lhs > rhs) ? lhs : rhs;
+    }
+
     struct Vector
     {
         float x, y, z;
@@ -72,30 +84,37 @@ namespace nMath
 
     inline bool Intersect2D(const LineSegment& v, const LineSegment& test)
     {
+        if (nMath::Min(v.start.x, v.end.x) > nMath::Max(test.start.x, test.end.x) ||
+            nMath::Max(v.start.x, v.end.x) < nMath::Min(test.start.x, test.end.x) ||
+            nMath::Min(v.start.y, v.end.y) > nMath::Max(test.start.y, test.end.y) ||
+            nMath::Max(v.start.y, v.end.y) < nMath::Min(test.start.y, test.end.y))
+        {
+            return false;
+        }
+
         const nMath::Vector test_dir = test.end - test.start;
         const nMath::Vector v_dir = v.end - v.start;
 
         const float numerator = v_dir.y * (test.start.x - v.start.x) - v_dir.x * (test.start.y - v.start.y);
         const float denominator = test_dir.y * v_dir.x - test_dir.x * v_dir.y;
 
-        if (denominator != 0.f)
+        if (denominator == 0.f)
         {
-            float r = numerator / denominator;
+            return true; // colinear and overlapping
+        }
+
+        float r = numerator / denominator;
+        if (r >= 0.f && r <= 1.f)
+        {
+            const float numerator2 = test_dir.x * (v.start.y - test.start.y) - test_dir.y * (v.start.x - test.start.x);                
+            r = numerator2 / denominator;
+
             if (r >= 0.f && r <= 1.f)
             {
-                //const float numerator2 = test_dir.y * (v.start.x - test.start.x) - test_dir.x * (v.start.y - test.start.y);
-                //const float denominator2 = v_dir.y * test_dir.x - v_dir.x * test_dir.y;
-                //const float r2 = (test.start.x - v.start.x + r * test_dir.x) / v_dir.x;
-                const float numerator2 = test_dir.x * (v.start.y - test.start.y) - test_dir.y * (v.start.x - test.start.x);
-                const float denominator2 = denominator;
-                r = numerator2 / denominator2;
-
-                if (r >= 0.f && r <= 1.f)
-                {
-                    return true;
-                }
+                return true;
             }
         }
+
         return false;
     }
 }

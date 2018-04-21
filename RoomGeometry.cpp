@@ -3,22 +3,10 @@
 #include "RoomGeometry.h"
 #define _USE_MATH_DEFINES
 #include <math.h>
+#include <unordered_set>
+#include <unordered_map>
+#include <queue>
 #include <array>
-
-namespace nMath
-{
-    template <typename T>
-    inline T Min(T lhs, T rhs)
-    {
-        return (lhs < rhs) ? lhs : rhs;
-    }
-
-    template <typename T>
-    inline T Max(T lhs, T rhs)
-    {
-        return (lhs > rhs) ? lhs : rhs;
-    }
-}
 
 typedef signed int int32; // TODO: PCH
 
@@ -304,7 +292,126 @@ float RoomGeometry::SimulateRayCasts(const nMath::Vector& source, const nMath::V
 template<bool capture_debug>
 float RoomGeometry::SimulateAStar(const nMath::Vector& source, const nMath::Vector& receiver) const
 {
-    (void)source;
-    (void)receiver;
-    return 0.f;
+    struct Coord
+    {
+        int row;
+        int col;
+    };
+    //auto coord_hash = [](const Coord& c)-> std::size_t
+    //{
+    //    return std::hash<uint64_t>()(((uint64_t)c.row << (uint64_t)32) | c.col);
+    //};
+
+    struct coord_hash
+    {
+        std::size_t operator()(const Coord& c) const
+        {
+            return std::hash<uint64_t>()(((uint64_t)c.row << (uint64_t)32) | c.col);
+        }
+    };
+
+    struct coord_eq
+    {
+        bool operator()(const Coord& lhs, const Coord& rhs) const
+        {
+            return lhs.col == rhs.col && lhs.row == rhs.row;
+        }
+    };
+
+    const int grid_half = (int)GridResolution / 2;
+    nMath::Vector grid_source = source * (float)GridCellsPerMeter + nMath::Vector{ (float)grid_half, (float)grid_half };
+    nMath::Vector grid_receiver = receiver * (float)GridCellsPerMeter + nMath::Vector{ (float)grid_half, (float)grid_half };
+
+    if (grid_source.x < 0 || grid_source.y < 0 ||
+        grid_receiver.x < 0 || grid_receiver.y < 0 ||
+        grid_source.x >= GridResolution || grid_source.y >= GridResolution ||
+        grid_receiver.x >= GridResolution || grid_receiver.y >= GridResolution)
+    {
+        return 0.f;
+    };
+
+    const Coord source_coord = Coord{(int)grid_source.x, (int)grid_source.y};
+    const Coord receiver_coord = Coord{ (int)grid_receiver.x, (int)grid_receiver.y };
+
+    auto heuristic = [&receiver_coord](const Coord& c)
+    {
+        return sqrtf((float)((c.col - receiver_coord.col)*(c.col - receiver_coord.col) +
+            (c.row - receiver_coord.row)*(c.row - receiver_coord.row)));
+    };
+    
+    std::unordered_set<Coord, coord_hash, coord_eq> discovered; discovered.reserve(2 * GridResolution);
+    std::unordered_set<Coord, coord_hash, coord_eq> checked; checked.reserve(2 * GridResolution);
+    std::unordered_map<Coord, Coord, coord_hash, coord_eq> incoming; incoming.reserve(2 * GridResolution);
+    std::unordered_map<Coord, float, coord_hash, coord_eq> scores; scores.reserve(2 * GridResolution);
+    typedef std::pair<float, Coord> ScoredCoord;
+    auto compareScore = [](const ScoredCoord& lhs, const ScoredCoord& rhs)
+    {
+        return lhs.first > rhs.first;
+    };
+    std::priority_queue<ScoredCoord, std::vector<ScoredCoord>, decltype(compareScore)> prediction(compareScore);
+    prediction.push(ScoredCoord(heuristic(source_coord), source_coord));
+
+    discovered.insert(source_coord);
+    scores[source_coord] = 0;
+    
+    static Coord neighbors[] = {
+        {-1, -1},
+        {-1,  0},
+        {-1,  1},
+        { 0, -1},
+        { 0,  1},
+        { 1, -1 },
+        { 1,  0 },
+        { 1,  1 },
+    };
+
+    while (!discovered.empty())
+    {
+        Coord next_coord = prediction.top().second;
+        if (checked.find(next_coord) != checked.end())
+        {
+            prediction.pop();
+            continue;
+        }
+
+        if (next_coord.col == receiver_coord.col &&
+            next_coord.row == receiver_coord.row)
+        {
+            break;
+        }
+        prediction.pop();
+
+        discovered.erase(next_coord);
+        checked.insert(next_coord);
+
+        float score = scores[next_coord];
+        for (int i = 0; i < 8; ++i)
+        {
+            Coord neighbor = neighbors[i];
+            const float neighbor_dist = (neighbor.row == 0 || neighbor.col == 0) ? 1.f : (float)M_SQRT2;
+            neighbor.row += next_coord.row;
+            neighbor.col += next_coord.col;
+            if (neighbor.row >= 0 && neighbor.row < GridResolution &&
+                neighbor.col >= 0 && neighbor.col < GridResolution)
+            {
+                if (checked.find(neighbor) != checked.end())
+                {
+                    continue;
+                }
+
+                discovered.insert(neighbor);
+                float neighbor_score = score + neighbor_dist;
+                if (scores.find(neighbor) == scores.end() ||
+                    scores[neighbor] > neighbor_score)
+                {
+                    incoming[neighbor] = next_coord;
+                    scores[neighbor] = neighbor_score;
+                    prediction.emplace(neighbor_score + heuristic(neighbor), neighbor);
+                }
+            }
+        }
+    }
+
+    Coord next_coord = prediction.top().second;
+    return heuristic(source_coord) / scores[next_coord];
 }

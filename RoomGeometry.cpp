@@ -65,7 +65,10 @@ RoomGeometry::RoomGeometry() :
     walls.reserve(4);
 
     grid = std::make_unique<GeometryGrid>();
+    grid_cache = std::make_unique<GeometryGridCache>();
     std::fill_n(&(*grid)[0][0], GridResolution * GridResolution, false);
+    grid_cache_dirty = true;
+    ResetCache();
 }
 
 void RoomGeometry::AddWall(const nMath::Vector start, const nMath::Vector end)
@@ -185,6 +188,15 @@ void RoomGeometry::SwapCollector(std::unique_ptr<RayCastCollector>& collector)
     std::swap(ray_cast_collector, collector);
 }
 
+void RoomGeometry::ResetCache()
+{
+    if (grid_cache_dirty)
+    {
+        std::fill_n(&(*grid_cache)[0][0], GridResolution * GridResolution, -1.f);
+        grid_cache_dirty = false;
+    }
+}
+
 template<>
 void RoomGeometry::CaptureDebug<false>(const nMath::LineSegment& _line) const
 {
@@ -292,6 +304,11 @@ float RoomGeometry::SimulateRayCasts(const nMath::Vector& source, const nMath::V
 template<bool capture_debug>
 float RoomGeometry::SimulateAStar(const nMath::Vector& source, const nMath::Vector& receiver) const
 {
+    if (!capture_debug)
+    {
+        grid_cache_dirty = true;
+    }
+
     struct Coord
     {
         int row;
@@ -328,6 +345,15 @@ float RoomGeometry::SimulateAStar(const nMath::Vector& source, const nMath::Vect
 
     const Coord source_coord = Coord{(int)grid_source.y, (int)grid_source.x};
     const Coord receiver_coord = Coord{ (int)grid_receiver.y, (int)grid_receiver.x };
+
+    if (!capture_debug) // TODO: This isn't great.
+    {
+        const float cached_value = (*grid_cache)[receiver_coord.row][receiver_coord.col];
+        if (cached_value >= 0.f)
+        {
+            return cached_value;
+        }
+    }
 
     auto heuristic = [&receiver_coord](const Coord& c)
     {
@@ -420,7 +446,7 @@ float RoomGeometry::SimulateAStar(const nMath::Vector& source, const nMath::Vect
     }
 
     Coord next_coord = prediction.top().second;
-    const float distance = scores[next_coord];
+    const float distance = scores[next_coord] / GridCellsPerMeter;
 
     static const float near_field_distance = 0.75f; // around 440 hz
     if (distance < near_field_distance)
@@ -428,7 +454,10 @@ float RoomGeometry::SimulateAStar(const nMath::Vector& source, const nMath::Vect
         return 1.f;
     }
     const float geometric_attenuation = nMath::Min(1.f, 1.f / distance);
-
+    if (!capture_debug)
+    {
+        (*grid_cache)[receiver_coord.row][receiver_coord.col] = geometric_attenuation;
+    }
     if (capture_debug)
     {
         Coord coord = next_coord;

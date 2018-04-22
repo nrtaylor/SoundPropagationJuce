@@ -598,7 +598,7 @@ void MainComponent::update()
 
             std::thread worker = std::thread([this, simulation_method, emitter_pos] {
                 std::lock_guard<std::mutex> guard(mutex_image);
-                std::shared_ptr<const RoomGeometry> room = current_room;
+                std::shared_ptr<RoomGeometry> room = current_room;
                 const SoundPropagation::MethodType simulation_compare_to = current_compare_to_method.load();                
                 const nMath::Vector center{ image_next.getWidth() / 2.f, image_next.getWidth() / 2.f, 0.f };
                 const float inv_zoom_factor = 1.f / 10.f;
@@ -606,6 +606,7 @@ void MainComponent::update()
                 const int extent = image_next.getWidth();
                 const Image::BitmapData bitmap(image_next, Image::BitmapData::writeOnly);
 
+                room->ResetCache();
                 uint8* pixel = bitmap.getPixelPointer(0, 0);
                 for (int i = 0; i < extent; ++i)
                 {

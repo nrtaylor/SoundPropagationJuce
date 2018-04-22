@@ -98,12 +98,15 @@ public:
     const static uint32_t GridCellsPerMeter = 2;
     const static uint32_t GridResolution = GridCellsPerMeter * GridDistance;
     typedef std::array<std::array<bool, GridResolution>, GridResolution> GeometryGrid;
+    typedef std::array<std::array<float, GridResolution>, GridResolution> GeometryGridCache;
 private:
     std::vector<nMath::LineSegment> walls;
     nMath::LineSegment bounding_box;
     std::unique_ptr<RayCastCollector> ray_cast_collector;
 
     std::unique_ptr<GeometryGrid> grid;
+    mutable std::unique_ptr<GeometryGridCache> grid_cache;
+    mutable bool grid_cache_dirty;
 public:
     typedef std::add_const<std::add_lvalue_reference<decltype(walls)>::type>::type ConstRefLineSegments;
     RoomGeometry();
@@ -115,6 +118,8 @@ public:
 
     template<bool capture_debug = false>
     bool Intersects(const nMath::LineSegment& _line) const;
+
+    void ResetCache();
 
     auto Walls() -> ConstRefLineSegments const
     { 

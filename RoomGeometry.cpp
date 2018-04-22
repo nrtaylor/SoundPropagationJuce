@@ -297,10 +297,6 @@ float RoomGeometry::SimulateAStar(const nMath::Vector& source, const nMath::Vect
         int row;
         int col;
     };
-    //auto coord_hash = [](const Coord& c)-> std::size_t
-    //{
-    //    return std::hash<uint64_t>()(((uint64_t)c.row << (uint64_t)32) | c.col);
-    //};
 
     struct coord_hash
     {
@@ -330,8 +326,8 @@ float RoomGeometry::SimulateAStar(const nMath::Vector& source, const nMath::Vect
         return 0.f;
     };
 
-    const Coord source_coord = Coord{(int)grid_source.x, (int)grid_source.y};
-    const Coord receiver_coord = Coord{ (int)grid_receiver.x, (int)grid_receiver.y };
+    const Coord source_coord = Coord{(int)grid_source.y, (int)grid_source.x};
+    const Coord receiver_coord = Coord{ (int)grid_receiver.y, (int)grid_receiver.x };
 
     auto heuristic = [&receiver_coord](const Coord& c)
     {
@@ -349,7 +345,8 @@ float RoomGeometry::SimulateAStar(const nMath::Vector& source, const nMath::Vect
         return lhs.first > rhs.first;
     };
     std::priority_queue<ScoredCoord, std::vector<ScoredCoord>, decltype(compareScore)> prediction(compareScore);
-    prediction.push(ScoredCoord(heuristic(source_coord), source_coord));
+    const float ideal_distance = heuristic(source_coord);
+    prediction.push(ScoredCoord(ideal_distance, source_coord));
 
     discovered.insert(source_coord);
     scores[source_coord] = 0;
@@ -365,6 +362,7 @@ float RoomGeometry::SimulateAStar(const nMath::Vector& source, const nMath::Vect
         { 1,  1 },
     };
 
+    int max_test = (int)(GridResolution * GridResolution / 2);
     while (!discovered.empty())
     {
         Coord next_coord = prediction.top().second;
@@ -384,6 +382,11 @@ float RoomGeometry::SimulateAStar(const nMath::Vector& source, const nMath::Vect
         discovered.erase(next_coord);
         checked.insert(next_coord);
 
+        if ((int)checked.size() > max_test)
+        {
+            return 0.f;
+        }
+
         float score = scores[next_coord];
         for (int i = 0; i < 8; ++i)
         {
@@ -397,6 +400,10 @@ float RoomGeometry::SimulateAStar(const nMath::Vector& source, const nMath::Vect
                 if (checked.find(neighbor) != checked.end())
                 {
                     continue;
+                }
+                if ((*grid)[neighbor.row][neighbor.col])
+                {
+                    continue; // not a neighbor
                 }
 
                 discovered.insert(neighbor);
@@ -413,5 +420,28 @@ float RoomGeometry::SimulateAStar(const nMath::Vector& source, const nMath::Vect
     }
 
     Coord next_coord = prediction.top().second;
-    return heuristic(source_coord) / scores[next_coord];
+    const float distance = scores[next_coord];
+
+    static const float near_field_distance = 0.75f; // around 440 hz
+    if (distance < near_field_distance)
+    {
+        return 1.f;
+    }
+    const float geometric_attenuation = nMath::Min(1.f, 1.f / distance);
+
+    if (capture_debug)
+    {
+        Coord coord = next_coord;
+        while (incoming.find(coord) != incoming.end())
+        {
+            Coord incoming_coord = incoming[coord];
+            nMath::LineSegment segment{
+                { ((float)coord.col - grid_half) / GridCellsPerMeter, ((float)coord.row - grid_half) / GridCellsPerMeter, 0.f },
+                { ((float)incoming_coord.col - grid_half) / GridCellsPerMeter, ((float)incoming_coord.row - grid_half) / GridCellsPerMeter, 0.f}
+            };
+            CaptureDebug<capture_debug>(segment);
+            coord = incoming_coord;
+        }
+    }
+    return geometric_attenuation;
 }

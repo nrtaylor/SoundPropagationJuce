@@ -11,6 +11,8 @@
 #include "nSignalProcessing.h"
 #include "RoomGeometry.h"
 
+//#define PROFILE_SIMULATION
+
 namespace ImageHelper
 {
     Image SquareImage(const Rectangle<int>& bounds)
@@ -556,6 +558,17 @@ void MainComponent::getNextAudioBlock(const AudioSourceChannelInfo& bufferToFill
     }
 }
 
+_declspec(noinline) bool WasteTime(int seed)
+{
+    float j = 112113.5f * (float)(seed + 1);
+    for (int i = 0; i < 6000; ++i)
+    {
+        j = sqrtf(j);
+    }
+
+    return j > 0.f;
+}
+
 // Animated Component
 void MainComponent::update()
 {
@@ -563,7 +576,11 @@ void MainComponent::update()
     nMath::Vector emitter_pos;
     {
         std::lock_guard<std::mutex> guard(*mutex_emitter_update);
+#ifndef PROFILE_SIMULATION        
         emitter_pos = moving_emitter->Update(frame_time - start_time);
+#else
+        emitter_pos = moving_emitter->Update(0);
+#endif
     }    
     std::shared_ptr<RoomGeometry> room = current_room; // this isn't guarunteed atomic
     const SoundPropagation::MethodType simulation_method = current_method.load();
@@ -606,12 +623,22 @@ void MainComponent::update()
                 const int extent = image_next.getWidth();
                 const Image::BitmapData bitmap(image_next, Image::BitmapData::writeOnly);
 
+#ifdef PROFILE_SIMULATION
+                Thread::sleep(5000);
+#endif
+
                 room->ResetCache();
                 uint8* pixel = bitmap.getPixelPointer(0, 0);
                 for (int i = 0; i < extent; ++i)
                 {
                     for (int j = 0; j < extent; ++j)
                     {
+#ifdef PROFILE_SIMULATION
+                        if (!WasteTime(j))
+                        {
+                            break;
+                        }
+#endif
                         const nMath::Vector pixel_to_world = { (j - center.x) * inv_zoom_factor,
                                                            (i - center.y) * -inv_zoom_factor,
                                                             0.f };

@@ -368,12 +368,12 @@ float RoomGeometry::SimulateAStar(const nMath::Vector& source, const nMath::Vect
     
     std::unordered_set<Coord, coord_hash, coord_eq> discovered; discovered.reserve(2 * GridResolution);
     std::unordered_set<Coord, coord_hash, coord_eq> checked; checked.reserve(2 * GridResolution);
-    std::unordered_map<Coord, Coord, coord_hash, coord_eq> incoming; incoming.reserve(2 * GridResolution);
-    std::unordered_map<Coord, float, coord_hash, coord_eq> scores; scores.reserve(2 * GridResolution);
-    //GeometryGridScore heap_score;
-    //const std::pair<int8_t, float> empty_score{ -1, 0.f };
-    //std::fill_n(&heap_score[0][0], GridResolution * GridResolution, empty_score);
-    //typedef std::pair<float, Coord> ScoredCoord;
+
+    GeometryGridScore heap_score;
+    typedef std::pair<int8_t, float> DiscoveredCoord;
+    const std::pair<int8_t, float> empty_score{ -1, FLT_MAX };
+    std::fill_n(&heap_score[0][0], GridResolution * GridResolution, empty_score);
+    typedef std::pair<float, Coord> ScoredCoord;
     auto compareScore = [](const ScoredCoord& lhs, const ScoredCoord& rhs)
     {
         return lhs.first > rhs.first;
@@ -383,7 +383,7 @@ float RoomGeometry::SimulateAStar(const nMath::Vector& source, const nMath::Vect
     prediction.push(ScoredCoord(ideal_distance, source_coord));
 
     discovered.insert(source_coord);
-    scores[source_coord] = 0;
+    heap_score[source_coord.row][source_coord.col] = DiscoveredCoord{ -1, 0.f };
     
     static Coord neighbors[] = {
         {-1, -1},
@@ -421,7 +421,7 @@ float RoomGeometry::SimulateAStar(const nMath::Vector& source, const nMath::Vect
             return 0.f;
         }
 
-        float score = scores[next_coord];
+        float score = heap_score[next_coord.row][next_coord.col].second;
         for (int i = 0; i < 8; ++i)
         {
             Coord neighbor = neighbors[i];
@@ -442,11 +442,10 @@ float RoomGeometry::SimulateAStar(const nMath::Vector& source, const nMath::Vect
 
                 discovered.insert(neighbor);
                 float neighbor_score = score + neighbor_dist;
-                if (scores.find(neighbor) == scores.end() ||
-                    scores[neighbor] > neighbor_score)
+                DiscoveredCoord& neighbor_info = heap_score[neighbor.row][neighbor.col];
+                if (neighbor_info.second > neighbor_score)
                 {
-                    incoming[neighbor] = next_coord;
-                    scores[neighbor] = neighbor_score;
+                    heap_score[neighbor.row][neighbor.col] = DiscoveredCoord{ (int8_t)i, neighbor_score };
                     prediction.emplace(neighbor_score + heuristic(neighbor), neighbor);
                 }
             }
@@ -454,12 +453,12 @@ float RoomGeometry::SimulateAStar(const nMath::Vector& source, const nMath::Vect
     }
 
     Coord next_coord = prediction.top().second;
-    const float distance = scores[next_coord] / GridCellsPerMeter;
+    float distance = heap_score[next_coord.row][next_coord.col].second / GridCellsPerMeter;
 
     static const float near_field_distance = 0.75f; // around 440 hz
     if (distance < near_field_distance)
     {
-        return 1.f;
+        distance = 1.f;
     }
     const float geometric_attenuation = nMath::Min(1.f, 1.f / distance);
     if (!capture_debug)
@@ -469,9 +468,12 @@ float RoomGeometry::SimulateAStar(const nMath::Vector& source, const nMath::Vect
     if (capture_debug)
     {
         Coord coord = next_coord;
-        while (incoming.find(coord) != incoming.end())
+        while (heap_score[coord.row][coord.col].first >= 0)
         {
-            Coord incoming_coord = incoming[coord];
+            DiscoveredCoord& coord_info = heap_score[coord.row][coord.col];
+            Coord incoming_coord = coord;
+            incoming_coord.row -= neighbors[coord_info.first].row;
+            incoming_coord.col -= neighbors[coord_info.first].col;
             nMath::LineSegment segment{
                 { ((float)coord.col - grid_half) / GridCellsPerMeter, ((float)coord.row - grid_half) / GridCellsPerMeter, 0.f },
                 { ((float)incoming_coord.col - grid_half) / GridCellsPerMeter, ((float)incoming_coord.row - grid_half) / GridCellsPerMeter, 0.f}

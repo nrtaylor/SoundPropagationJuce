@@ -319,7 +319,7 @@ float RoomGeometry::SimulateAStar(const nMath::Vector& source, const nMath::Vect
     {
         std::size_t operator()(const Coord& c) const
         {
-            return std::hash<uint64_t>()(((uint64_t)c.row << (uint64_t)32) | c.col);
+            return std::hash<uint64_t>()(*(const uint64_t*)(const void*)(&c));
         }
     };
 
@@ -346,6 +346,11 @@ float RoomGeometry::SimulateAStar(const nMath::Vector& source, const nMath::Vect
     const Coord source_coord = Coord{(int)grid_source.y, (int)grid_source.x};
     const Coord receiver_coord = Coord{ (int)grid_receiver.y, (int)grid_receiver.x };
 
+    if ((*grid)[receiver_coord.row][receiver_coord.col])
+    {
+        return 0.f; // wall
+    }
+
     if (!capture_debug) // TODO: This isn't great.
     {
         const float cached_value = (*grid_cache)[receiver_coord.row][receiver_coord.col];
@@ -365,7 +370,10 @@ float RoomGeometry::SimulateAStar(const nMath::Vector& source, const nMath::Vect
     std::unordered_set<Coord, coord_hash, coord_eq> checked; checked.reserve(2 * GridResolution);
     std::unordered_map<Coord, Coord, coord_hash, coord_eq> incoming; incoming.reserve(2 * GridResolution);
     std::unordered_map<Coord, float, coord_hash, coord_eq> scores; scores.reserve(2 * GridResolution);
-    typedef std::pair<float, Coord> ScoredCoord;
+    //GeometryGridScore heap_score;
+    //const std::pair<int8_t, float> empty_score{ -1, 0.f };
+    //std::fill_n(&heap_score[0][0], GridResolution * GridResolution, empty_score);
+    //typedef std::pair<float, Coord> ScoredCoord;
     auto compareScore = [](const ScoredCoord& lhs, const ScoredCoord& rhs)
     {
         return lhs.first > rhs.first;
@@ -423,13 +431,13 @@ float RoomGeometry::SimulateAStar(const nMath::Vector& source, const nMath::Vect
             if (neighbor.row >= 0 && neighbor.row < GridResolution &&
                 neighbor.col >= 0 && neighbor.col < GridResolution)
             {
-                if (checked.find(neighbor) != checked.end())
-                {
-                    continue;
-                }
                 if ((*grid)[neighbor.row][neighbor.col])
                 {
                     continue; // not a neighbor
+                }
+                if (checked.find(neighbor) != checked.end())
+                {
+                    continue;
                 }
 
                 discovered.insert(neighbor);

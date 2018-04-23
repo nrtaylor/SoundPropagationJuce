@@ -315,22 +315,6 @@ float RoomGeometry::SimulateAStar(const nMath::Vector& source, const nMath::Vect
         int col;
     };
 
-    struct coord_hash
-    {
-        std::size_t operator()(const Coord& c) const
-        {
-            return std::hash<uint64_t>()(*(const uint64_t*)(const void*)(&c));
-        }
-    };
-
-    struct coord_eq
-    {
-        bool operator()(const Coord& lhs, const Coord& rhs) const
-        {
-            return lhs.col == rhs.col && lhs.row == rhs.row;
-        }
-    };
-
     const int grid_half = (int)GridResolution / 2;
     nMath::Vector grid_source = source * (float)GridCellsPerMeter + nMath::Vector{ (float)grid_half, (float)grid_half };
     nMath::Vector grid_receiver = receiver * (float)GridCellsPerMeter + nMath::Vector{ (float)grid_half, (float)grid_half };
@@ -363,16 +347,12 @@ float RoomGeometry::SimulateAStar(const nMath::Vector& source, const nMath::Vect
     auto heuristic = [&receiver_coord](const Coord& c)
     {
         return sqrtf((float)((c.col - receiver_coord.col)*(c.col - receiver_coord.col) +
-            (c.row - receiver_coord.row)*(c.row - receiver_coord.row)));
+            (c.row - receiver_coord.row)*(c.row - receiver_coord.row))); // TODO: sqrtf not needed?
     };
     
-    std::unordered_set<Coord, coord_hash, coord_eq> discovered; discovered.reserve(2 * GridResolution);
-    std::unordered_set<Coord, coord_hash, coord_eq> checked; checked.reserve(2 * GridResolution);
-
-    GeometryGridScore heap_score;
-    typedef std::pair<int8_t, float> DiscoveredCoord;
-    const std::pair<int8_t, float> empty_score{ -1, FLT_MAX };
-    std::fill_n(&heap_score[0][0], GridResolution * GridResolution, empty_score);
+    GeometryGridScore heap_score;    
+    const GridNode empty_node{ FLT_MAX, -1, GNS_NOT_FOUND };
+    std::fill_n(&heap_score[0][0], GridResolution * GridResolution, empty_node);
     typedef std::pair<float, Coord> ScoredCoord;
     auto compareScore = [](const ScoredCoord& lhs, const ScoredCoord& rhs)
     {
@@ -382,8 +362,8 @@ float RoomGeometry::SimulateAStar(const nMath::Vector& source, const nMath::Vect
     const float ideal_distance = heuristic(source_coord);
     prediction.push(ScoredCoord(ideal_distance, source_coord));
 
-    discovered.insert(source_coord);
-    heap_score[source_coord.row][source_coord.col] = DiscoveredCoord{ -1, 0.f };
+    // Start
+    heap_score[source_coord.row][source_coord.col] = GridNode{ 0.f, -1, GNS_FOUND };
     
     static Coord neighbors[] = {
         {-1, -1},
@@ -396,32 +376,34 @@ float RoomGeometry::SimulateAStar(const nMath::Vector& source, const nMath::Vect
         { 1,  1 },
     };
 
-    int max_test = (int)(GridResolution * GridResolution / 2);
-    while (!discovered.empty())
+    const int max_test = (int)(GridResolution * GridResolution / 2);
+    uint32_t num_checked = 0;
+    uint32_t num_discovered = 1;
+    while (num_discovered)
     {
         Coord next_coord = prediction.top().second;
-        if (checked.find(next_coord) != checked.end())
+        GridNode& node = heap_score[next_coord.row][next_coord.col];
+        if (node.state == GNS_CHECKED)
         {
             prediction.pop();
             continue;
         }
+        node.state = GNS_CHECKED;
+        --num_discovered;
 
         if (next_coord.col == receiver_coord.col &&
             next_coord.row == receiver_coord.row)
         {
             break;
         }
-        prediction.pop();
-
-        discovered.erase(next_coord);
-        checked.insert(next_coord);
-
-        if ((int)checked.size() > max_test)
+        if (++num_checked > max_test)
         {
             return 0.f;
         }
 
-        float score = heap_score[next_coord.row][next_coord.col].second;
+        prediction.pop();
+
+        float score = node.score;
         for (int i = 0; i < 8; ++i)
         {
             Coord neighbor = neighbors[i];
@@ -431,21 +413,25 @@ float RoomGeometry::SimulateAStar(const nMath::Vector& source, const nMath::Vect
             if (neighbor.row >= 0 && neighbor.row < GridResolution &&
                 neighbor.col >= 0 && neighbor.col < GridResolution)
             {
+                GridNode& neighbor_info = heap_score[neighbor.row][neighbor.col];
                 if ((*grid)[neighbor.row][neighbor.col])
                 {
                     continue; // not a neighbor
                 }
-                if (checked.find(neighbor) != checked.end())
+                if (neighbor_info.state == GNS_CHECKED)
                 {
                     continue;
                 }
 
-                discovered.insert(neighbor);
                 float neighbor_score = score + neighbor_dist;
-                DiscoveredCoord& neighbor_info = heap_score[neighbor.row][neighbor.col];
-                if (neighbor_info.second > neighbor_score)
+                if (neighbor_info.score > neighbor_score)
                 {
-                    heap_score[neighbor.row][neighbor.col] = DiscoveredCoord{ (int8_t)i, neighbor_score };
+                    if (neighbor_info.state == GNS_NOT_FOUND)
+                    {
+                        ++num_discovered;
+                    }
+
+                    heap_score[neighbor.row][neighbor.col] = GridNode{ neighbor_score, (int8_t)i, GNS_FOUND };
                     prediction.emplace(neighbor_score + heuristic(neighbor), neighbor);
                 }
             }
@@ -453,7 +439,7 @@ float RoomGeometry::SimulateAStar(const nMath::Vector& source, const nMath::Vect
     }
 
     Coord next_coord = prediction.top().second;
-    float distance = heap_score[next_coord.row][next_coord.col].second / GridCellsPerMeter;
+    float distance = heap_score[next_coord.row][next_coord.col].score / GridCellsPerMeter;
 
     static const float near_field_distance = 0.75f; // around 440 hz
     if (distance < near_field_distance)
@@ -468,12 +454,12 @@ float RoomGeometry::SimulateAStar(const nMath::Vector& source, const nMath::Vect
     if (capture_debug)
     {
         Coord coord = next_coord;
-        while (heap_score[coord.row][coord.col].first >= 0)
+        while (heap_score[coord.row][coord.col].link_index >= 0)
         {
-            DiscoveredCoord& coord_info = heap_score[coord.row][coord.col];
+            GridNode& coord_info = heap_score[coord.row][coord.col];
             Coord incoming_coord = coord;
-            incoming_coord.row -= neighbors[coord_info.first].row;
-            incoming_coord.col -= neighbors[coord_info.first].col;
+            incoming_coord.row -= neighbors[coord_info.link_index].row;
+            incoming_coord.col -= neighbors[coord_info.link_index].col;
             nMath::LineSegment segment{
                 { ((float)coord.col - grid_half) / GridCellsPerMeter, ((float)coord.row - grid_half) / GridCellsPerMeter, 0.f },
                 { ((float)incoming_coord.col - grid_half) / GridCellsPerMeter, ((float)incoming_coord.row - grid_half) / GridCellsPerMeter, 0.f}

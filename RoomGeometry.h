@@ -99,7 +99,19 @@ public:
     const static uint32_t GridResolution = GridCellsPerMeter * GridDistance;
     typedef std::array<std::array<bool, GridResolution>, GridResolution> GeometryGrid;
     typedef std::array<std::array<float, GridResolution>, GridResolution> GeometryGridCache;
-    typedef std::array<std::array<std::pair<int8_t, float>, GridResolution>, GridResolution> GeometryGridScore;
+    enum GridNodeState : int8_t
+    {
+        GNS_NOT_FOUND = 0,
+        GNS_FOUND,
+        GNS_CHECKED
+    };
+    struct GridNode
+    {
+        float score;
+        int8_t link_index;
+        GridNodeState state;
+    };
+    typedef std::array<std::array<GridNode, GridResolution>, GridResolution> GeometryGridScore;
 private:
     std::vector<nMath::LineSegment> walls;
     nMath::LineSegment bounding_box;

@@ -14,7 +14,7 @@
 //#define PROFILE_SIMULATION
 
 namespace ImageHelper
-{
+{   
     Image SquareImage(const Rectangle<int>& bounds)
     {
         const int extent = jmin(bounds.getWidth(), bounds.getHeight());

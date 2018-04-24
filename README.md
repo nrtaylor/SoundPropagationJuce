@@ -12,3 +12,5 @@ Known limitations to fix later:
 - Audio files are hardcoded.
 - The apps screen dimenisions dictates the resolution of the generated image used to display results.
 - Receiver location is fixed at 0,0.
+
+![alt text](/Images/SoundPropagation-A_Star-4_2018.png)

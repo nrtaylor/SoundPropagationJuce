@@ -55,6 +55,7 @@ MainComponent::MainComponent() :
     show_spl = false;
     show_ray_casts = false;
     show_grid = false;
+    show_contours = false;
     flag_refresh_image = false;
     flag_update_working = false;
 
@@ -108,6 +109,10 @@ MainComponent::MainComponent() :
     addAndMakeVisible(&button_show_grid);
     button_show_grid.setButtonText("Draw Grid");
     button_show_grid.addListener(this);
+
+    addAndMakeVisible(&button_show_contours);
+    button_show_contours.setButtonText("Contours");
+    button_show_contours.addListener(this);
 
     addAndMakeVisible(&slider_spl_freq);
     slider_spl_freq.setRange(20.0, 20000.0, 0.5);
@@ -478,6 +483,7 @@ void MainComponent::resized()
     button_show_spl.setBounds(new_width - 202, 200 + 68, 200, 20);
     button_show_ray_casts.setBounds(new_width - 104, 200 + 68, 200, 20);
     button_show_grid.setBounds(new_width - 202, 200 + 90, 200, 20);
+    button_show_contours.setBounds(new_width - 104, 200 + 90, 200, 20);
     slider_spl_freq.setBounds(new_width - 202, 200 + 112, 200, 20);
     group_atmosphere.setBounds(new_width - 244, 200 + 142, 238, 116);
 }
@@ -611,9 +617,11 @@ void MainComponent::update()
             {
                 std::lock_guard<std::mutex> guard(mutex_image);
                 image_next = ImageHelper::SquareImage(getBounds());
-            }            
+            }
 
-            std::thread worker = std::thread([this, simulation_method, emitter_pos] {
+            bool overlay_contours = show_contours.load();
+
+            std::thread worker = std::thread([this, simulation_method, emitter_pos, overlay_contours] {
                 std::lock_guard<std::mutex> guard(mutex_image);
                 std::shared_ptr<RoomGeometry> room = current_room;
                 const SoundPropagation::MethodType simulation_compare_to = current_compare_to_method.load();                
@@ -630,9 +638,10 @@ void MainComponent::update()
                 room->ResetCache();
                 uint8* pixel = bitmap.getPixelPointer(0, 0);
 
+                // for contours
                 std::vector<float> previous_row; previous_row.resize(extent);
                 std::fill(previous_row.begin(), previous_row.end(), FLT_MAX);
-                int index = 0;
+                
                 for (int i = 0; i < extent; ++i)
                 {
                     for (int j = 0; j < extent; ++j)
@@ -652,90 +661,36 @@ void MainComponent::update()
                             float compare_to_energy = room->Simulate(emitter_pos, pixel_to_world, simulation_compare_to);
                             energy = fabs(energy - compare_to_energy);                            
                         }
-                        int contour = -1;
+                        int contour_color = -1;
 
-                            if (energy <= 0.5f &&
-                                ((j && previous_row[index - 1] > 0.5f) ||
-                                (i && previous_row[index] > 0.5f)))
-                            {
-                                contour = 196;
-                            }
-                            else if (energy <= 0.25f &&
-                                ((j && previous_row[index - 1] > 0.25f) ||
-                                (i && previous_row[index] > 0.25f)))
-                            {
-                                contour = 196 - 32;
-                            }
-                            else if (energy <= 0.125f &&
-                                ((j && previous_row[index - 1] > 0.125f) ||
-                                (i && previous_row[index] > 0.125f)))
-                            {
-                                contour = 196 - 64;
-                            }
-                            else if (energy <= 0.125f / 2.f &&
-                                ((j && previous_row[index - 1] > 0.125f / 2.f) ||
-                                (i && previous_row[index] > 0.125f / 2.f)))
-                            {
-                                contour = 196 - 96;
-                            }
-                            else if (energy <= 0.125f / 4.f &&
-                                ((j && previous_row[index - 1] > 0.125f / 4.f) ||
-                                (i && previous_row[index] > 0.125f / 4.f)))
-                            {
-                                contour = 196 - 128;
-                            }
-                            else if (energy <= 0.125f / 8.f &&
-                                ((j && previous_row[index - 1] > 0.125f / 8.f) ||
-                                (i && previous_row[index] > 0.125f / 8.f)))
-                            {
-                                contour = 196 - 160;
-                            }
-
-                            if (energy > 0.5f &&
-                                ((j && previous_row[index - 1] <= 0.5f) ||
-                                (i && previous_row[index] <= 0.5f)))
-                            {
-                                contour = 196 - 32;
-                            }
-                            else if (energy > 0.25f &&
-                                ((j && previous_row[index - 1] <= 0.25f) ||
-                                (i && previous_row[index] <= 0.25f)))
-                            {
-                                contour = 196 - 32;
-                            }
-                            else if (energy > 0.125f &&
-                                ((j && previous_row[index - 1] <= 0.125f) ||
-                                (i && previous_row[index] <= 0.125f)))
-                            {
-                                contour = 196 - 64;
-                            }
-                            else if (energy > 0.125f / 2.f &&
-                                ((j && previous_row[index - 1] <= 0.125f / 2.f) ||
-                                (i && previous_row[index] <= 0.125f / 2.f)))
-                            {
-                                contour = 196 - 96;
-                            }
-                            else if (energy > 0.125f / 4.f &&
-                                ((j && previous_row[index - 1] <= 0.125f / 4.f) ||
-                                (i && previous_row[index] <= 0.125f / 4.f)))
-                            {
-                                contour = 196 - 128;
-                            }
-                            else if (energy > 0.125f / 8.f &&
-                                ((j && previous_row[index - 1] <= 0.125f / 8.f) ||
-                                (i && previous_row[index] <= 0.125f / 8.f)))
-                            {
-                                contour = 196 - 160;
-                            }
-                        
-                        previous_row[index] = energy;
-                        ++index;
-                        if (index == extent)
+                        if (overlay_contours)
                         {
-                            index = 0;
+                            const int num_countours = 6;
+                            float threshold = 0.5f;
+                            for (int c = 0; c < num_countours; ++c)
+                            {
+                                if (energy <= threshold &&
+                                    ((j && previous_row[j - 1] > threshold) ||
+                                    (i && previous_row[j] > threshold)))
+                                {
+                                    contour_color = 192 - (c * 32);
+                                    break;
+                                }
+                                else if (energy > threshold &&
+                                    ((j && previous_row[j - 1] <= threshold) ||
+                                    (i && previous_row[j] <= threshold)))
+                                {
+                                    contour_color = 192 - (c * 32);
+                                    break;
+                                }
+                                threshold /= 2.f;
+                            }
+
+                            previous_row[j] = energy;
                         }
-                        const uint8 colour = contour > 0 ?
-                            (uint8)contour :
+
+                        const uint8 colour = contour_color > 0 ?
+                            (uint8)contour_color :
                             (uint8)jmin<uint32>(255, (uint32)(255.f*energy));
                         *pixel++ = colour;
                         *pixel++ = colour;
@@ -807,6 +762,10 @@ void MainComponent::buttonClicked(Button* buttonClicked)
     else if (buttonClicked == &button_show_grid)
     {
         show_grid = button_show_grid.getToggleState();
+    }
+    else if (buttonClicked == &button_show_contours)
+    {
+        show_contours = button_show_contours.getToggleState();
     }
 }
 

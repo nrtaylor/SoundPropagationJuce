@@ -629,6 +629,10 @@ void MainComponent::update()
 
                 room->ResetCache();
                 uint8* pixel = bitmap.getPixelPointer(0, 0);
+
+                std::vector<float> previous_row; previous_row.resize(extent);
+                std::fill(previous_row.begin(), previous_row.end(), FLT_MAX);
+                uint32_t index = 0;
                 for (int i = 0; i < extent; ++i)
                 {
                     for (int j = 0; j < extent; ++j)
@@ -648,7 +652,91 @@ void MainComponent::update()
                             float compare_to_energy = room->Simulate(emitter_pos, pixel_to_world, simulation_compare_to);
                             energy = fabs(energy - compare_to_energy);                            
                         }
-                        const uint8 colour = (uint8)jmin<uint32>(255, (uint32)(255.f*energy));
+                        int contour = -1;
+
+                            if (energy <= 0.5f &&
+                                ((j && previous_row[index - 1] > 0.5f) ||
+                                (i && previous_row[index] > 0.5f)))
+                            {
+                                contour = 196;
+                            }
+                            else if (energy <= 0.25f &&
+                                ((j && previous_row[index - 1] > 0.25f) ||
+                                (i && previous_row[index] > 0.25f)))
+                            {
+                                contour = 196 - 32;
+                            }
+                            else if (energy <= 0.125f &&
+                                ((j && previous_row[index - 1] > 0.125f) ||
+                                (i && previous_row[index] > 0.125f)))
+                            {
+                                contour = 196 - 64;
+                            }
+                            else if (energy <= 0.125f / 2.f &&
+                                ((j && previous_row[index - 1] > 0.125f / 2.f) ||
+                                (i && previous_row[index] > 0.125f / 2.f)))
+                            {
+                                contour = 196 - 96;
+                            }
+                            else if (energy <= 0.125f / 4.f &&
+                                ((j && previous_row[index - 1] > 0.125f / 4.f) ||
+                                (i && previous_row[index] > 0.125f / 4.f)))
+                            {
+                                contour = 196 - 128;
+                            }
+                            else if (energy <= 0.125f / 8.f &&
+                                ((j && previous_row[index - 1] > 0.125f / 8.f) ||
+                                (i && previous_row[index] > 0.125f / 8.f)))
+                            {
+                                contour = 196 - 160;
+                            }
+
+                            if (energy > 0.5f &&
+                                ((j && previous_row[index - 1] <= 0.5f) ||
+                                (i && previous_row[index] <= 0.5f)))
+                            {
+                                contour = 196 - 32;
+                            }
+                            else if (energy > 0.25f &&
+                                ((j && previous_row[index - 1] <= 0.25f) ||
+                                (i && previous_row[index] <= 0.25f)))
+                            {
+                                contour = 196 - 32;
+                            }
+                            else if (energy > 0.125f &&
+                                ((j && previous_row[index - 1] <= 0.125f) ||
+                                (i && previous_row[index] <= 0.125f)))
+                            {
+                                contour = 196 - 64;
+                            }
+                            else if (energy > 0.125f / 2.f &&
+                                ((j && previous_row[index - 1] <= 0.125f / 2.f) ||
+                                (i && previous_row[index] <= 0.125f / 2.f)))
+                            {
+                                contour = 196 - 96;
+                            }
+                            else if (energy > 0.125f / 4.f &&
+                                ((j && previous_row[index - 1] <= 0.125f / 4.f) ||
+                                (i && previous_row[index] <= 0.125f / 4.f)))
+                            {
+                                contour = 196 - 128;
+                            }
+                            else if (energy > 0.125f / 8.f &&
+                                ((j && previous_row[index - 1] <= 0.125f / 8.f) ||
+                                (i && previous_row[index] <= 0.125f / 8.f)))
+                            {
+                                contour = 196 - 160;
+                            }
+                        
+                        previous_row[index] = energy;
+                        ++index;
+                        if (index == extent)
+                        {
+                            index = 0;
+                        }
+                        const uint8 colour = contour > 0 ?
+                            (uint8)contour :
+                            (uint8)jmin<uint32>(255, (uint32)(255.f*energy));
                         *pixel++ = colour;
                         *pixel++ = colour;
                         *pixel++ = colour;

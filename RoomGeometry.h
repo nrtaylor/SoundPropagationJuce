@@ -120,6 +120,11 @@ private:
     std::unique_ptr<GeometryGrid> grid;
     mutable std::unique_ptr<GeometryGridCache> grid_cache;
     mutable bool grid_cache_dirty;
+    struct Coord
+    {
+        int row;
+        int col;
+    };
 public:
     typedef std::add_const<std::add_lvalue_reference<decltype(walls)>::type>::type ConstRefLineSegments;
     RoomGeometry();
@@ -155,6 +160,9 @@ private:
 
     template<bool capture_debug = false>
     float SimulateAStar(const nMath::Vector& source, const nMath::Vector& receiver) const;
+
+    template<bool capture_debug = false>
+    float SimulateAStarDiscrete(const Coord& source, const Coord& receiver) const;
 
     template<bool capture_debug>
     void CaptureDebug(const nMath::LineSegment& _line) const;

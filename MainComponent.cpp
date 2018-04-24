@@ -632,7 +632,7 @@ void MainComponent::update()
 
                 std::vector<float> previous_row; previous_row.resize(extent);
                 std::fill(previous_row.begin(), previous_row.end(), FLT_MAX);
-                uint32_t index = 0;
+                int index = 0;
                 for (int i = 0; i < extent; ++i)
                 {
                     for (int j = 0; j < extent; ++j)

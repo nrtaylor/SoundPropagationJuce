@@ -304,17 +304,6 @@ float RoomGeometry::SimulateRayCasts(const nMath::Vector& source, const nMath::V
 template<bool capture_debug>
 float RoomGeometry::SimulateAStar(const nMath::Vector& source, const nMath::Vector& receiver) const
 {
-    if (!capture_debug)
-    {
-        grid_cache_dirty = true;
-    }
-
-    struct Coord
-    {
-        int row;
-        int col;
-    };
-
     const int grid_half = (int)GridResolution / 2;
     nMath::Vector grid_source = source * (float)GridCellsPerMeter + nMath::Vector{ (float)grid_half, (float)grid_half };
     nMath::Vector grid_receiver = receiver * (float)GridCellsPerMeter + nMath::Vector{ (float)grid_half, (float)grid_half };
@@ -329,10 +318,78 @@ float RoomGeometry::SimulateAStar(const nMath::Vector& source, const nMath::Vect
 
     const Coord source_coord = Coord{(int)grid_source.y, (int)grid_source.x};
     const Coord receiver_coord = Coord{ (int)grid_receiver.y, (int)grid_receiver.x };
+    
+    nMath::Vector cell_receiver{ grid_receiver.x - (float)receiver_coord.col, grid_receiver.y - (float)receiver_coord.row, 0.f };
 
-    if ((*grid)[receiver_coord.row][receiver_coord.col])
+    float bary[3];
+    Coord coord_tri[3];
+    // Find the three cell coordinates closest to the receiver.
+    if (cell_receiver.x < 0.5f)
     {
-        return 0.f; // wall
+        coord_tri[0] = { 0, 0 };
+        coord_tri[1] = { 1, 0 };
+        if (cell_receiver.y < 0.5f)
+        {
+            bary[1] = cell_receiver.y;
+            bary[2] = cell_receiver.x;
+            coord_tri[2] = { 0, 1 };
+        }
+        else
+        {
+            bary[2] = cell_receiver.x;
+            bary[1] = cell_receiver.y - bary[2];
+            coord_tri[2] = { 1, 1 };
+        }
+    }
+    else
+    {
+        // To treat coord_tri[0] as 0, imagine the triangle being shifted left by 1 col.
+        // This means the x/col coord is in the negative direction, but becuase we are 
+        // guarunteed to be on or in the triangle, that component of the triangle needs a
+        // weight of 1.f - x.
+        coord_tri[0] = { 0, 1 }; // coord_tri[0] = { 0, 1 - 1 }; replace with to solve bary by hand.
+        coord_tri[1] = { 1, 1 };
+        if (cell_receiver.y < 0.5f)
+        {
+            bary[1] = cell_receiver.y;
+            bary[2] = 1.f - cell_receiver.x;
+            coord_tri[2] = { 0, 0 };
+        }
+        else
+        {
+            bary[2] = 1.f - cell_receiver.x;
+            bary[1] = cell_receiver.y - bary[2];
+            coord_tri[2] = { 1, 0 };
+        }
+    }
+
+    bary[0] = 1.f - bary[1] - bary[2];
+
+    float sum = 0.f;
+    for (int i = 0; i < 3; ++i)
+    {
+        Coord test_coord = receiver_coord;
+        test_coord.row += coord_tri[i].row;
+        test_coord.col += coord_tri[i].col;
+        sum += bary[i] * SimulateAStarDiscrete(source_coord, test_coord);
+    }
+
+    return sum;
+}
+
+template<bool capture_debug>
+float RoomGeometry::SimulateAStarDiscrete(const RoomGeometry::Coord& source_coord, const RoomGeometry::Coord& receiver_coord) const
+{
+    if (!capture_debug)
+    {
+        grid_cache_dirty = true;
+    }
+    
+    if (receiver_coord.row >= GridResolution ||
+        receiver_coord.col >= GridResolution ||
+        (*grid)[receiver_coord.row][receiver_coord.col]) // wall
+    {
+        return 0.f;
     }
 
     if (!capture_debug) // TODO: This isn't great.
@@ -349,8 +406,8 @@ float RoomGeometry::SimulateAStar(const nMath::Vector& source, const nMath::Vect
         return sqrtf((float)((c.col - receiver_coord.col)*(c.col - receiver_coord.col) +
             (c.row - receiver_coord.row)*(c.row - receiver_coord.row))); // TODO: sqrtf not needed?
     };
-    
-    GeometryGridScore heap_score;    
+
+    GeometryGridScore heap_score;
     const GridNode empty_node{ FLT_MAX, -1, GNS_NOT_FOUND };
     std::fill_n(&heap_score[0][0], GridResolution * GridResolution, empty_node);
     typedef std::pair<float, Coord> ScoredCoord;
@@ -364,13 +421,13 @@ float RoomGeometry::SimulateAStar(const nMath::Vector& source, const nMath::Vect
 
     // Start
     heap_score[source_coord.row][source_coord.col] = GridNode{ 0.f, -1, GNS_FOUND };
-    
+
     static Coord neighbors[] = {
-        {-1, -1},
-        {-1,  0},
-        {-1,  1},
-        { 0, -1},
-        { 0,  1},
+        { -1, -1 },
+        { -1,  0 },
+        { -1,  1 },
+        { 0, -1 },
+        { 0,  1 },
         { 1, -1 },
         { 1,  0 },
         { 1,  1 },
@@ -453,6 +510,7 @@ float RoomGeometry::SimulateAStar(const nMath::Vector& source, const nMath::Vect
     }
     if (capture_debug)
     {
+        const int grid_half = (int)GridResolution / 2;
         Coord coord = next_coord;
         while (heap_score[coord.row][coord.col].link_index >= 0)
         {
@@ -462,7 +520,7 @@ float RoomGeometry::SimulateAStar(const nMath::Vector& source, const nMath::Vect
             incoming_coord.col -= neighbors[coord_info.link_index].col;
             nMath::LineSegment segment{
                 { ((float)coord.col - grid_half) / GridCellsPerMeter, ((float)coord.row - grid_half) / GridCellsPerMeter, 0.f },
-                { ((float)incoming_coord.col - grid_half) / GridCellsPerMeter, ((float)incoming_coord.row - grid_half) / GridCellsPerMeter, 0.f}
+                { ((float)incoming_coord.col - grid_half) / GridCellsPerMeter, ((float)incoming_coord.row - grid_half) / GridCellsPerMeter, 0.f }
             };
             CaptureDebug<capture_debug>(segment);
             coord = incoming_coord;

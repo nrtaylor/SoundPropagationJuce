@@ -318,7 +318,12 @@ float RoomGeometry::SimulateAStar(const nMath::Vector& source, const nMath::Vect
 
     const Coord source_coord = Coord{(int)grid_source.y, (int)grid_source.x};
     const Coord receiver_coord = Coord{ (int)grid_receiver.y, (int)grid_receiver.x };
-    
+
+    if (capture_debug)
+    {
+        return SimulateAStarDiscrete<true>(source_coord, receiver_coord);
+    }
+
     nMath::Vector cell_receiver{ grid_receiver.x - (float)receiver_coord.col, grid_receiver.y - (float)receiver_coord.row, 0.f };
 
     float bary[3];

@@ -7,3 +7,8 @@ Current Stage:
 Next Stage:
 - New mode that use "edges" (endpoints or concave angles) as nodes for finding multiple propagation paths.
 - Refactor geometric attenuation out of Simulate and integrate the atmospheric attenuation based on the frequecny slider.
+
+Known limitations to fix later:
+- Audio files are hardcoded.
+- The apps screen dimenisions dictates the resolution of the generated image used to display results.
+- Receiver location is fixed at 0,0.

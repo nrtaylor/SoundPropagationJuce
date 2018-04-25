@@ -14,3 +14,4 @@ Known limitations to fix later:
 - Receiver location is fixed at 0,0.
 
 ![alt text](/Images/SoundPropagation-A_Star-4_2018.png)
+![alt text](/Images/SoundPropagation-Planned_Features-4_2018.png)

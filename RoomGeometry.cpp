@@ -420,7 +420,9 @@ float RoomGeometry::SimulateAStarDiscrete(const RoomGeometry::Coord& source_coor
     {
         return lhs.first > rhs.first;
     };
-    std::priority_queue<ScoredCoord, std::vector<ScoredCoord>, decltype(compareScore)> prediction(compareScore);
+    std::vector<ScoredCoord> heap_storage; heap_storage.reserve((size_t)(8 * M_SQRT2 * GridResolution));
+    std::priority_queue<ScoredCoord, std::vector<ScoredCoord>, decltype(compareScore)> prediction(compareScore, heap_storage);
+    
     const float ideal_distance = heuristic(source_coord);
     prediction.push(ScoredCoord(ideal_distance, source_coord));
 

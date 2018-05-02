@@ -428,7 +428,7 @@ void PriorityQueue<T, Less>::Push(T&& _val)
 template<class T, class Less>
 void PriorityQueue<T, Less>::Pop()
 {
-    std::swap(container[0], container.back());
+    container[0] = container.back();
     container.pop_back();
 
     const uint32_t heap = (uint32_t)container.size();
@@ -487,27 +487,26 @@ float RoomGeometry::SimulateAStarDiscrete(const RoomGeometry::Coord& source_coor
 
     auto heuristic = [&receiver_coord](const Coord& c)
     {
-        return sqrtf((float)((c.col - receiver_coord.col)*(c.col - receiver_coord.col) +
-            (c.row - receiver_coord.row)*(c.row - receiver_coord.row)));
+        return (uint32_t)(sqrtf((float)((c.col - receiver_coord.col)*(c.col - receiver_coord.col) +
+            (c.row - receiver_coord.row)*(c.row - receiver_coord.row))) * 1000.f);
     };
 
     GeometryGridScore heap_score;
-    const GridNode empty_node{ FLT_MAX, -1, GNS_NOT_FOUND };
+    const GridNode empty_node{ INT_MAX, -1, GNS_NOT_FOUND };
     std::fill_n(&heap_score[0][0], GridResolution * GridResolution, empty_node);
-    typedef std::pair<float, Coord> ScoredCoord;
+    typedef std::pair<uint32_t, Coord> ScoredCoord;
     auto compareScore = [](const ScoredCoord& lhs, const ScoredCoord& rhs)
     {
         return lhs.first < rhs.first;
     };
-    //std::vector<ScoredCoord> heap_storage; heap_storage.reserve((size_t)(8 * M_SQRT2 * GridResolution));
-    //std::priority_queue<ScoredCoord, std::vector<ScoredCoord>, decltype(compareScore)> prediction(compareScore, heap_storage);
+
     PriorityQueue<ScoredCoord, decltype(compareScore)> prediction((size_t)(8 * M_SQRT2 * GridResolution), compareScore);
     
-    const float ideal_distance = heuristic(source_coord);
+    const uint32_t ideal_distance = heuristic(source_coord);
     prediction.Push(ScoredCoord(ideal_distance, source_coord));
 
     // Start
-    heap_score[source_coord.row][source_coord.col] = GridNode{ 0.f, -1, GNS_FOUND };
+    heap_score[source_coord.row][source_coord.col] = GridNode{ 0, -1, GNS_FOUND };
 
     static Coord neighbors[] = {
         { -1, -1 },
@@ -523,6 +522,7 @@ float RoomGeometry::SimulateAStarDiscrete(const RoomGeometry::Coord& source_coor
     const int max_test = (int)(GridResolution * GridResolution / 2);
     uint32_t num_checked = 0;
     uint32_t num_discovered = 1;
+    static const uint32_t score_diagonal = (uint32_t)(M_SQRT2*1000.f);
     while (num_discovered)
     {
         Coord next_coord = prediction.Top().second;
@@ -547,11 +547,11 @@ float RoomGeometry::SimulateAStarDiscrete(const RoomGeometry::Coord& source_coor
 
         prediction.Pop();
 
-        float score = node.score;
+        const uint32_t score = node.score;
         for (int i = 0; i < 8; ++i)
         {
             Coord neighbor = neighbors[i];
-            const float neighbor_dist = (neighbor.row == 0 || neighbor.col == 0) ? 1.f : (float)M_SQRT2;
+            const uint32_t neighbor_dist = (neighbor.row == 0 || neighbor.col == 0) ? 1000 : score_diagonal;
             neighbor.row += next_coord.row;
             neighbor.col += next_coord.col;
             if (neighbor.row >= 0 && neighbor.row < GridResolution &&
@@ -567,7 +567,7 @@ float RoomGeometry::SimulateAStarDiscrete(const RoomGeometry::Coord& source_coor
                     continue;
                 }
 
-                float neighbor_score = score + neighbor_dist;
+                const uint32_t neighbor_score = score + neighbor_dist;
                 if (neighbor_info.score > neighbor_score)
                 {
                     if (neighbor_info.state == GNS_NOT_FOUND)
@@ -583,7 +583,7 @@ float RoomGeometry::SimulateAStarDiscrete(const RoomGeometry::Coord& source_coor
     }
 
     Coord next_coord = prediction.Top().second;
-    float distance = heap_score[next_coord.row][next_coord.col].score / GridCellsPerMeter;
+    float distance = heap_score[next_coord.row][next_coord.col].score / (1000.f * GridCellsPerMeter);
 
     static const float near_field_distance = 0.75f; // around 440 hz
     if (distance < near_field_distance)

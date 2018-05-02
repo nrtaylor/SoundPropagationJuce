@@ -107,7 +107,7 @@ public:
     };
     struct GridNode
     {
-        float score;
+        uint32_t score;
         int8_t link_index;
         GridNodeState state;
     };

@@ -173,6 +173,9 @@ MainComponent::MainComponent() :
     addAndMakeVisible(&combo_room);    
     combo_room.addListener(this);
 
+    planner_astar = std::make_unique<PlannerAStar>();
+    planners_refresh = true;
+
     addAndMakeVisible(&label_selected_room);
     label_selected_room.setText("Room", dontSendNotification);
     label_selected_room.attachToComponent(&combo_room, true);
@@ -620,8 +623,10 @@ void MainComponent::update()
             }
 
             bool overlay_contours = show_contours.load();
+            bool perform_refresh = planners_refresh.load(); // TODO: Plan updates for emitter_pos.
+            planners_refresh = false;
 
-            std::thread worker = std::thread([this, simulation_method, emitter_pos, overlay_contours] {
+            std::thread worker = std::thread([this, simulation_method, emitter_pos, overlay_contours, perform_refresh] {
                 std::lock_guard<std::mutex> guard(mutex_image);
                 std::shared_ptr<RoomGeometry> room = current_room;
                 const SoundPropagation::MethodType simulation_compare_to = current_compare_to_method.load();                
@@ -634,7 +639,11 @@ void MainComponent::update()
 #ifdef PROFILE_SIMULATION
                 Thread::sleep(5000);
 #endif
-
+                const bool using_planner = simulation_method == SoundPropagation::MethodType::Method_Pathfinding;
+                if (using_planner)
+                {
+                    planner_astar->Plan(*room, emitter_pos);
+                }
                 uint8* pixel = bitmap.getPixelPointer(0, 0);
 
                 // for contours
@@ -654,7 +663,9 @@ void MainComponent::update()
                         const nMath::Vector pixel_to_world = { (j - center.x) * inv_zoom_factor,
                                                            (i - center.y) * -inv_zoom_factor,
                                                             0.f };
-                        float energy = room->Simulate(emitter_pos, pixel_to_world, simulation_method);
+                        float energy = using_planner ?
+                            planner_astar->Simulate(pixel_to_world) :
+                            room->Simulate(emitter_pos, pixel_to_world, simulation_method);
                         if (simulation_compare_to != SoundPropagation::Method_Off)
                         {
                             float compare_to_energy = room->Simulate(emitter_pos, pixel_to_world, simulation_compare_to);
@@ -784,11 +795,13 @@ void MainComponent::comboBoxChanged(ComboBox* comboBoxThatHasChanged)
         if (next_id > 0)
         {
             current_room = rooms[next_id - 1];
+            planners_refresh = true;
         }
     }
     else if (comboBoxThatHasChanged == &combo_method)
     {
         current_method = static_cast<SoundPropagation::MethodType>(combo_method.getSelectedId());
+        planners_refresh = true;
     }
     else if (comboBoxThatHasChanged == &combo_compare_to_method)
     {

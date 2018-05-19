@@ -536,12 +536,12 @@ PlannerAStar::PlannerAStar()
 {
     grid = std::make_unique<GeometryGrid>();
     grid_cache = std::make_unique<GeometryGridCache>();
-    std::fill_n(&(*grid)[0][0], GridResolution * GridResolution, false);
 }
 
 void PlannerAStar::Plan(const RoomGeometry& room, const nMath::Vector& source)
 {
     std::fill_n(&(*grid_cache)[0][0], GridResolution * GridResolution, -1.f);
+    std::fill_n(&(*grid)[0][0], GridResolution * GridResolution, false);
 
     auto& walls = room.Walls();
     for (const nMath::LineSegment& ls : walls)
@@ -639,6 +639,7 @@ float PlannerAStar::FindAStarDiscrete(const Coord& receiver_coord)
 {
     if ((*grid)[receiver_coord.row][receiver_coord.col]) // wall
     {
+        (*grid_cache)[receiver_coord.row][receiver_coord.col] = 0.f;
         return 0.f;
     }
 
@@ -834,7 +835,7 @@ float PlannerAStar::Simulate(const nMath::Vector& receiver) const
         if (test_coord.col < GridResolution &&
             test_coord.row < GridResolution)
         {
-            sum += bary[i] * (*grid)[test_coord.row][test_coord.col];
+            sum += bary[i] * (*grid_cache)[test_coord.row][test_coord.col];
         }
     }
 

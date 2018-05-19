@@ -13,6 +13,7 @@
 class MovingEmitter;
 class RoomGeometry;
 class RayCastCollector;
+class PlannerAStar;
 namespace nDSP
 {
     struct Butterworth1Pole;
@@ -92,6 +93,9 @@ private:
     std::shared_ptr<RoomGeometry> current_room;
     std::unique_ptr<RayCastCollector> ray_cast_collector;
     std::unique_ptr<std::mutex> mutex_ray_cast_collector;
+
+    std::unique_ptr<PlannerAStar> planner_astar;
+    std::atomic<bool> planners_refresh;
     
     std::array<SoundBuffer, 2> test_buffers;
     std::atomic_uint32_t selected_test_buffer;

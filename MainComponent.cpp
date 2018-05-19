@@ -409,30 +409,30 @@ void MainComponent::PaintRoom(Graphics& _g, const Rectangle<int> _bounds, const 
         }
         _g.fillPath(room_lines);
 
-        if (show_grid.load())
-        {
-            const std::unique_ptr<RoomGeometry::GeometryGrid>& grid = room->Grid();
-            if (grid != nullptr)
-            {
-                _g.setColour(Colour::fromRGBA(0x77, 0x77, 0x77, 0x99));
-                int offset = (int)(min_extent / 2.f - _zoom_factor * RoomGeometry::GridDistance / 2);
-                int cellSize = 10 / RoomGeometry::GridCellsPerMeter;
-                for (int i = 0; i < RoomGeometry::GridResolution; ++i)
-                {
-                    for (int j = 0; j < RoomGeometry::GridResolution; ++j)
-                    {
-                        if (bool value = (*grid)[i][j])
-                        {
-                            _g.fillRect(
-                                cellSize * j + offset + 1,
-                                cellSize * (RoomGeometry::GridResolution - i - 1) + offset - 1,
-                                cellSize - 1,
-                                cellSize - 1);
-                        }
-                    }
-                }
-            }
-        }
+        //if (show_grid.load())
+        //{
+        //    const std::unique_ptr<RoomGeometry::GeometryGrid>& grid = room->Grid();
+        //    if (grid != nullptr)
+        //    {
+        //        _g.setColour(Colour::fromRGBA(0x77, 0x77, 0x77, 0x99));
+        //        int offset = (int)(min_extent / 2.f - _zoom_factor * RoomGeometry::GridDistance / 2);
+        //        int cellSize = 10 / RoomGeometry::GridCellsPerMeter;
+        //        for (int i = 0; i < RoomGeometry::GridResolution; ++i)
+        //        {
+        //            for (int j = 0; j < RoomGeometry::GridResolution; ++j)
+        //            {
+        //                if (bool value = (*grid)[i][j])
+        //                {
+        //                    _g.fillRect(
+        //                        cellSize * j + offset + 1,
+        //                        cellSize * (RoomGeometry::GridResolution - i - 1) + offset - 1,
+        //                        cellSize - 1,
+        //                        cellSize - 1);
+        //                }
+        //            }
+        //        }
+        //    }
+        //}
     }
 }
 
@@ -567,7 +567,7 @@ void MainComponent::getNextAudioBlock(const AudioSourceChannelInfo& bufferToFill
 _declspec(noinline) bool WasteTime(int seed)
 {
     float j = 112113.5f * (float)(seed + 1);
-    for (int i = 0; i < 6000; ++i)
+    for (int i = 0; i < 1000; ++i)
     {
         j = sqrtf(j);
     }
@@ -635,7 +635,6 @@ void MainComponent::update()
                 Thread::sleep(5000);
 #endif
 
-                room->ResetCache();
                 uint8* pixel = bitmap.getPixelPointer(0, 0);
 
                 // for contours

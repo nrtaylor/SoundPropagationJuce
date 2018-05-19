@@ -93,6 +93,48 @@ public:
 
 class RoomGeometry
 {
+private:
+    std::vector<nMath::LineSegment> walls;
+    nMath::LineSegment bounding_box;
+    std::unique_ptr<RayCastCollector> ray_cast_collector;
+public:
+    typedef std::add_const<std::add_lvalue_reference<decltype(walls)>::type>::type ConstRefLineSegments;
+    RoomGeometry();
+
+    void AddWall(const nMath::Vector start, const nMath::Vector end);
+
+    template<bool capture_debug = false>
+    float Simulate(const nMath::Vector& source, const nMath::Vector& receiver, const SoundPropagation::MethodType method) const;
+
+    template<bool capture_debug = false>
+    bool Intersects(const nMath::LineSegment& _line) const;
+
+    const std::vector<nMath::LineSegment>& Walls() const
+    { 
+        return walls; 
+    }
+
+    void SwapCollector(std::unique_ptr<RayCastCollector>& collector);
+
+private:
+    template<bool capture_debug = false>
+    float SimulateSpecularLOS(const nMath::Vector& source, const nMath::Vector& receiver) const;
+
+    template<bool capture_debug = false>
+    float SimulateRayCasts(const nMath::Vector& source, const nMath::Vector& receiver) const;
+
+    //template<bool capture_debug = false>
+    //float SimulateAStar(const nMath::Vector& source, const nMath::Vector& receiver) const;
+
+    //template<bool capture_debug = false>
+    //float SimulateAStarDiscrete(const Coord& source, const Coord& receiver) const;
+
+    template<bool capture_debug>
+    void CaptureDebug(const nMath::LineSegment& _line) const;
+};
+
+class PlannerAStar
+{
 public:
     const static uint32_t GridDistance = 60; // meters    
     const static uint32_t GridCellsPerMeter = 2;
@@ -113,59 +155,25 @@ public:
     };
     typedef std::array<std::array<GridNode, GridResolution>, GridResolution> GeometryGridScore;
 private:
-    std::vector<nMath::LineSegment> walls;
-    nMath::LineSegment bounding_box;
-    std::unique_ptr<RayCastCollector> ray_cast_collector;
-
-    std::unique_ptr<GeometryGrid> grid;
-    mutable std::unique_ptr<GeometryGridCache> grid_cache;
-    mutable bool grid_cache_dirty;
     struct Coord
     {
         int row;
         int col;
     };
+    std::unique_ptr<GeometryGrid> grid;
+    std::unique_ptr<GeometryGridCache> grid_cache;
+    Coord source_coord;
 public:
-    typedef std::add_const<std::add_lvalue_reference<decltype(walls)>::type>::type ConstRefLineSegments;
-    RoomGeometry();
-
-    void AddWall(const nMath::Vector start, const nMath::Vector end);
-
-    template<bool capture_debug = false>
-    float Simulate(const nMath::Vector& source, const nMath::Vector& receiver, const SoundPropagation::MethodType method) const;
-
-    template<bool capture_debug = false>
-    bool Intersects(const nMath::LineSegment& _line) const;
-
-    void ResetCache();
-
-    auto Walls() -> ConstRefLineSegments const
-    { 
-        return walls; 
-    }
-
-    void SwapCollector(std::unique_ptr<RayCastCollector>& collector);
+    PlannerAStar();
+    void Plan(const RoomGeometry& room, const nMath::Vector& source);
+    float Simulate(const nMath::Vector& receiver) const;
 
     const std::unique_ptr<GeometryGrid>& Grid() const
     {
         return grid;
     }
-
 private:
-    template<bool capture_debug = false>
-    float SimulateSpecularLOS(const nMath::Vector& source, const nMath::Vector& receiver) const;
-
-    template<bool capture_debug = false>
-    float SimulateRayCasts(const nMath::Vector& source, const nMath::Vector& receiver) const;
-
-    template<bool capture_debug = false>
-    float SimulateAStar(const nMath::Vector& source, const nMath::Vector& receiver) const;
-
-    template<bool capture_debug = false>
-    float SimulateAStarDiscrete(const Coord& source, const Coord& receiver) const;
-
-    template<bool capture_debug>
-    void CaptureDebug(const nMath::LineSegment& _line) const;
+    float FindAStarDiscrete(const Coord& receiver_coord);
 };
 
 template float RoomGeometry::Simulate<false>(const nMath::Vector& source, const nMath::Vector& receiver, const SoundPropagation::MethodType method) const;

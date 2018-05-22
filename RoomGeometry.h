@@ -16,6 +16,7 @@ namespace SoundPropagation
         Method_SpecularLOS = 1,
         Method_RayCasts,
         Method_Pathfinding,
+        Method_Wave,
 
         Method_Off
     };
@@ -123,19 +124,28 @@ private:
     template<bool capture_debug = false>
     float SimulateRayCasts(const nMath::Vector& source, const nMath::Vector& receiver) const;
 
-    //template<bool capture_debug = false>
-    //float SimulateAStar(const nMath::Vector& source, const nMath::Vector& receiver) const;
-
-    //template<bool capture_debug = false>
-    //float SimulateAStarDiscrete(const Coord& source, const Coord& receiver) const;
-
     template<bool capture_debug>
     void CaptureDebug(const nMath::LineSegment& _line) const;
 };
 
-class PlannerAStar
+class PlannerWave
 {
 public:
+    PlannerWave() 
+    {
+        Plan(nMath::Vector{ 0.f,0.f,0.f }, 0.f, 1.f);
+    }
+    void Plan(const nMath::Vector& _source, const float _frequency, const float _time_scale);
+    float Simulate(const nMath::Vector& receiver, const float time_ms) const;
+private:
+    nMath::Vector source;
+    float frequency;
+    float time_factor;
+};
+
+class PlannerAStar
+{
+private:
     const static uint32_t GridDistance = 60; // meters    
     const static uint32_t GridCellsPerMeter = 2;
     const static uint32_t GridResolution = GridCellsPerMeter * GridDistance;
@@ -154,18 +164,17 @@ public:
         GridNodeState state;
     };
     typedef std::array<std::array<GridNode, GridResolution>, GridResolution> GeometryGridScore;
-private:
+
     struct Coord
     {
         int row;
         int col;
     };
-    std::unique_ptr<GeometryGrid> grid;
-    std::unique_ptr<GeometryGridCache> grid_cache;
-    Coord source_coord;
+
 public:
     PlannerAStar();
-    void Plan(const RoomGeometry& room, const nMath::Vector& source);
+    void Preprocess(const RoomGeometry& room);
+    void Plan(const nMath::Vector& source);
     float Simulate(const nMath::Vector& receiver) const;
 
     const std::unique_ptr<GeometryGrid>& Grid() const
@@ -174,6 +183,10 @@ public:
     }
 private:
     float FindAStarDiscrete(const Coord& receiver_coord);
+
+    std::unique_ptr<GeometryGrid> grid;
+    std::unique_ptr<GeometryGridCache> grid_cache;
+    Coord source_coord;
 };
 
 template float RoomGeometry::Simulate<false>(const nMath::Vector& source, const nMath::Vector& receiver, const SoundPropagation::MethodType method) const;

@@ -117,13 +117,26 @@ MainComponent::MainComponent() :
     addAndMakeVisible(&slider_spl_freq);
     slider_spl_freq.setRange(20.0, 20000.0, 0.5);
     slider_spl_freq.setTextValueSuffix(" Hz");
-    slider_spl_freq.setValue(1000.0);
+    slider_spl_freq.setValue(440.0);
     slider_spl_freq.setSkewFactorFromMidPoint(440.0);
     slider_spl_freq.addListener(this);
+    test_frequency = 440.f;
 
     addAndMakeVisible(&label_spl_freq);
     label_spl_freq.setText("Test Freq", dontSendNotification);
     label_spl_freq.attachToComponent(&slider_spl_freq, true);
+
+    addAndMakeVisible(&slider_time_scale);
+    slider_time_scale.setRange(1.0, 1000.0, 1.0);
+    slider_time_scale.setTextValueSuffix(" %");
+    slider_time_scale.setValue(1.0);
+    slider_time_scale.setSkewFactorFromMidPoint(100.0);
+    slider_time_scale.addListener(this);
+    time_scale = 1.f;
+
+    addAndMakeVisible(&label_time_scale);
+    label_time_scale.setText("Time Stretch", dontSendNotification);
+    label_time_scale.attachToComponent(&slider_time_scale, true);
 
     addAndMakeVisible(&group_atmosphere);
     group_atmosphere.setText("Atmosphere");
@@ -174,6 +187,7 @@ MainComponent::MainComponent() :
     combo_room.addListener(this);
 
     planner_astar = std::make_unique<PlannerAStar>();
+    planner_wave = std::make_unique<PlannerWave>();
     planners_refresh = true;
 
     addAndMakeVisible(&label_selected_room);
@@ -258,6 +272,7 @@ MainComponent::MainComponent() :
     combo_method.addItem("Specular (LOS)", SoundPropagation::Method_SpecularLOS);
     combo_method.addItem("Ray Casts", SoundPropagation::Method_RayCasts);
     combo_method.addItem("A*", SoundPropagation::Method_Pathfinding);
+    combo_method.addItem("Wave Equation", SoundPropagation::Method_Wave);
     current_method = SoundPropagation::Method_SpecularLOS;
     combo_method.setSelectedId(SoundPropagation::Method_SpecularLOS);
 
@@ -298,7 +313,9 @@ void MainComponent::initialise()
         SoundBufferHelper::LoadFromFile(test_buffers[1], format_manager, "..\\..\\..\\test_tones.wav");
         strcpy(test_buffers[1].name, "Two Tones");
         combo_selected_sound.addItem(test_buffers[1].name, 2);
-        combo_selected_sound.addItem("Off", 3);
+
+        combo_selected_sound.addItem("Frequency", 3);
+        combo_selected_sound.addItem("Off", 4);
     }
 
     {
@@ -488,7 +505,8 @@ void MainComponent::resized()
     button_show_grid.setBounds(new_width - 202, 200 + 90, 200, 20);
     button_show_contours.setBounds(new_width - 104, 200 + 90, 200, 20);
     slider_spl_freq.setBounds(new_width - 202, 200 + 112, 200, 20);
-    group_atmosphere.setBounds(new_width - 244, 200 + 142, 238, 116);
+    slider_time_scale.setBounds(new_width - 202, 200 + 134, 200, 20);
+    group_atmosphere.setBounds(new_width - 244, 200 + 164, 238, 116);
 }
 
 // Audio Component
@@ -622,11 +640,13 @@ void MainComponent::update()
                 image_next = ImageHelper::SquareImage(getBounds());
             }
 
+            const float time_now = (float)(Time::currentTimeMillis() % ((1 + (int)test_frequency) * 1000));// TODO: start at t = 0 or store in planner.
+
             bool overlay_contours = show_contours.load();
-            bool perform_refresh = planners_refresh.load(); // TODO: Plan updates for emitter_pos.
+            bool perform_refresh = planners_refresh.load();
             planners_refresh = false;
 
-            std::thread worker = std::thread([this, simulation_method, emitter_pos, overlay_contours, perform_refresh] {
+            std::thread worker = std::thread([this, simulation_method, emitter_pos, overlay_contours, perform_refresh, time_now] {
                 std::lock_guard<std::mutex> guard(mutex_image);
                 std::shared_ptr<RoomGeometry> room = current_room;
                 const SoundPropagation::MethodType simulation_compare_to = current_compare_to_method.load();                
@@ -639,10 +659,22 @@ void MainComponent::update()
 #ifdef PROFILE_SIMULATION
                 Thread::sleep(5000);
 #endif
-                const bool using_planner = simulation_method == SoundPropagation::MethodType::Method_Pathfinding;
+                const bool using_planner = simulation_method == SoundPropagation::MethodType::Method_Pathfinding ||
+                                           simulation_method == SoundPropagation::MethodType::Method_Wave;
                 if (using_planner)
                 {
-                    planner_astar->Plan(*room, emitter_pos);
+                    if (simulation_method == SoundPropagation::MethodType::Method_Pathfinding)
+                    {
+                        if (perform_refresh)
+                        {
+                            planner_astar->Preprocess(*room);
+                        }
+                        planner_astar->Plan(emitter_pos);
+                    }
+                    else
+                    {
+                        planner_wave->Plan(emitter_pos, test_frequency.load(), time_scale.load());
+                    }
                 }
                 uint8* pixel = bitmap.getPixelPointer(0, 0);
 
@@ -664,8 +696,10 @@ void MainComponent::update()
                                                            (i - center.y) * -inv_zoom_factor,
                                                             0.f };
                         float energy = using_planner ?
-                            planner_astar->Simulate(pixel_to_world) :
-                            room->Simulate(emitter_pos, pixel_to_world, simulation_method);
+                            (simulation_method == SoundPropagation::MethodType::Method_Pathfinding ?
+                             planner_astar->Simulate(pixel_to_world) 
+                                : planner_wave->Simulate(pixel_to_world, time_now)) 
+                             : room->Simulate(emitter_pos, pixel_to_world, simulation_method);
                         if (simulation_compare_to != SoundPropagation::Method_Off)
                         {
                             float compare_to_energy = room->Simulate(emitter_pos, pixel_to_world, simulation_compare_to);
@@ -734,6 +768,14 @@ void MainComponent::sliderValueChanged(Slider* slider)
     else if (slider == &slider_freq)
     {
         moving_emitter->SetFrequency((float)slider_freq.getValue());
+    }
+    else if (slider == &slider_spl_freq)
+    {
+        test_frequency = (float)slider_spl_freq.getValue();
+    }
+    else if (slider == &slider_time_scale)
+    {
+        time_scale = (float)slider_time_scale.getValue();
     }
     else if (slider == &slider_radius ||
              slider == &slider_temperature ||

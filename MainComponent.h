@@ -14,6 +14,7 @@ class MovingEmitter;
 class RoomGeometry;
 class RayCastCollector;
 class PlannerAStar;
+class PlannerWave;
 namespace nDSP
 {
     struct Butterworth1Pole;
@@ -96,6 +97,8 @@ private:
 
     std::unique_ptr<PlannerAStar> planner_astar;
     std::atomic<bool> planners_refresh;
+
+    std::unique_ptr<PlannerWave> planner_wave;
     
     std::array<SoundBuffer, 2> test_buffers;
     std::atomic_uint32_t selected_test_buffer;
@@ -141,6 +144,11 @@ private:
 
     Slider slider_spl_freq;
     Label label_spl_freq;
+    std::atomic<float> test_frequency;
+
+    Slider slider_time_scale;
+    Label label_time_scale;
+    std::atomic<float> time_scale;
 
     GroupComponent group_atmosphere;    
     Slider slider_temperature;

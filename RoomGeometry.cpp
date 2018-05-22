@@ -104,8 +104,6 @@ float RoomGeometry::Simulate(const nMath::Vector& source, const nMath::Vector& r
         return SimulateSpecularLOS<capture_debug>(source, receiver);
     case SoundPropagation::Method_RayCasts:
         return SimulateRayCasts<capture_debug>(source, receiver);
-    //case SoundPropagation::Method_Pathfinding:
-    //    return SimulateAStar<capture_debug>(source, receiver);
     default:
         return 0.f;
     }
@@ -115,15 +113,6 @@ void RoomGeometry::SwapCollector(std::unique_ptr<RayCastCollector>& collector)
 {
     std::swap(ray_cast_collector, collector);
 }
-//
-//void RoomGeometry::ResetCache()
-//{
-//    if (grid_cache_dirty)
-//    {
-//        std::fill_n(&(*grid_cache)[0][0], GridResolution * GridResolution, -1.f);
-//        grid_cache_dirty = false;
-//    }
-//}
 
 template<>
 void RoomGeometry::CaptureDebug<false>(const nMath::LineSegment& _line) const
@@ -218,89 +207,6 @@ float RoomGeometry::SimulateRayCasts(const nMath::Vector& source, const nMath::V
     return geometric_attenuation;
 }
 
-#ifdef RUNTIME_ASTAR
-template<bool capture_debug>
-float RoomGeometry::SimulateAStar(const nMath::Vector& source, const nMath::Vector& receiver) const
-{
-    const int grid_half = (int)GridResolution / 2;
-    nMath::Vector grid_source = source * (float)GridCellsPerMeter + nMath::Vector{ (float)grid_half, (float)grid_half };
-    nMath::Vector grid_receiver = receiver * (float)GridCellsPerMeter + nMath::Vector{ (float)grid_half, (float)grid_half };
-
-    if (grid_source.x < 0 || grid_source.y < 0 ||
-        grid_receiver.x < 0 || grid_receiver.y < 0 ||
-        grid_source.x >= GridResolution || grid_source.y >= GridResolution ||
-        grid_receiver.x >= GridResolution || grid_receiver.y >= GridResolution)
-    {
-        return 0.f;
-    };
-
-    const Coord source_coord = Coord{(int)grid_source.y, (int)grid_source.x};
-    const Coord receiver_coord = Coord{ (int)grid_receiver.y, (int)grid_receiver.x };
-
-    if (capture_debug)
-    {
-        return SimulateAStarDiscrete<true>(source_coord, receiver_coord);
-    }
-
-    nMath::Vector cell_receiver{ grid_receiver.x - (float)receiver_coord.col, grid_receiver.y - (float)receiver_coord.row, 0.f };
-
-    float bary[3];
-    Coord coord_tri[3];
-    // Find the three cell coordinates closest to the receiver.
-    if (cell_receiver.x < 0.5f)
-    {
-        coord_tri[0] = { 0, 0 };
-        coord_tri[1] = { 1, 0 };
-        if (cell_receiver.y < 0.5f)
-        {
-            bary[1] = cell_receiver.y;
-            bary[2] = cell_receiver.x;
-            coord_tri[2] = { 0, 1 };
-        }
-        else
-        {
-            bary[2] = cell_receiver.x;
-            bary[1] = cell_receiver.y - bary[2];
-            coord_tri[2] = { 1, 1 };
-        }
-    }
-    else
-    {
-        // To treat coord_tri[0] as 0, imagine the triangle being shifted left by 1 col.
-        // This means the x/col coord is in the negative direction, but becuase we are 
-        // guarunteed to be on or in the triangle, that component of the triangle needs a
-        // weight of 1.f - x.
-        coord_tri[0] = { 0, 1 }; // coord_tri[0] = { 0, 1 - 1 }; replace with to solve bary by hand.
-        coord_tri[1] = { 1, 1 };
-        if (cell_receiver.y < 0.5f)
-        {
-            bary[1] = cell_receiver.y;
-            bary[2] = 1.f - cell_receiver.x;
-            coord_tri[2] = { 0, 0 };
-        }
-        else
-        {
-            bary[2] = 1.f - cell_receiver.x;
-            bary[1] = cell_receiver.y - bary[2];
-            coord_tri[2] = { 1, 0 };
-        }
-    }
-
-    bary[0] = 1.f - bary[1] - bary[2];
-
-    float sum = 0.f;
-    for (int i = 0; i < 3; ++i)
-    {
-        Coord test_coord = receiver_coord;
-        test_coord.row += coord_tri[i].row;
-        test_coord.col += coord_tri[i].col;
-        sum += bary[i] * SimulateAStarDiscrete(source_coord, test_coord);
-    }
-
-    return sum;
-}
-#endif
-
 template<class T, class Less>
 class PriorityQueue
 {
@@ -380,167 +286,14 @@ void PriorityQueue<T, Less>::Pop()
     }
 }
 
-#ifdef RUNTIME_ASTAR
-template<bool capture_debug>
-float RoomGeometry::SimulateAStarDiscrete(const RoomGeometry::Coord& source_coord, const RoomGeometry::Coord& receiver_coord) const
-{
-    if (!capture_debug)
-    {
-        grid_cache_dirty = true;
-    }
-    
-    if (receiver_coord.row >= GridResolution ||
-        receiver_coord.col >= GridResolution ||
-        (*grid)[receiver_coord.row][receiver_coord.col]) // wall
-    {
-        return 0.f;
-    }
-
-    if (!capture_debug) // TODO: This isn't great.
-    {
-        const float cached_value = (*grid_cache)[receiver_coord.row][receiver_coord.col];
-        if (cached_value >= 0.f)
-        {
-            return cached_value;
-        }
-    }
-
-    auto heuristic = [&receiver_coord](const Coord& c)
-    {
-        return (uint32_t)(sqrtf((float)((c.col - receiver_coord.col)*(c.col - receiver_coord.col) +
-            (c.row - receiver_coord.row)*(c.row - receiver_coord.row))) * 1000.f);
-    };
-
-    GeometryGridScore heap_score;
-    const GridNode empty_node{ INT_MAX, -1, GNS_NOT_FOUND };
-    std::fill_n(&heap_score[0][0], GridResolution * GridResolution, empty_node);
-    typedef std::pair<uint32_t, Coord> ScoredCoord;
-    auto compareScore = [](const ScoredCoord& lhs, const ScoredCoord& rhs)
-    {
-        return lhs.first < rhs.first;
-    };
-
-    PriorityQueue<ScoredCoord, decltype(compareScore)> prediction((size_t)(8 * M_SQRT2 * GridResolution), compareScore);
-    
-    const uint32_t ideal_distance = heuristic(source_coord);
-    prediction.Push(ScoredCoord(ideal_distance, source_coord));
-
-    // Start
-    heap_score[source_coord.row][source_coord.col] = GridNode{ 0, -1, GNS_FOUND };
-
-    static Coord neighbors[] = {
-        { -1, -1 },
-        { -1,  0 },
-        { -1,  1 },
-        { 0, -1 },
-        { 0,  1 },
-        { 1, -1 },
-        { 1,  0 },
-        { 1,  1 },
-    };
-
-    const int max_test = (int)(GridResolution * GridResolution / 2);
-    uint32_t num_checked = 0;
-    uint32_t num_discovered = 1;
-    static const uint32_t score_diagonal = (uint32_t)(M_SQRT2*1000.f);
-    while (num_discovered)
-    {
-        Coord next_coord = prediction.Top().second;
-        GridNode& node = heap_score[next_coord.row][next_coord.col];
-        if (node.state == GNS_CHECKED)
-        {
-            prediction.Pop();
-            continue;
-        }
-        node.state = GNS_CHECKED;
-        --num_discovered;
-
-        if (next_coord.col == receiver_coord.col &&
-            next_coord.row == receiver_coord.row)
-        {
-            break;
-        }
-        if (++num_checked > max_test)
-        {
-            return 0.f;
-        }
-
-        prediction.Pop();
-
-        const uint32_t score = node.score;
-        for (int i = 0; i < 8; ++i)
-        {
-            Coord neighbor = neighbors[i];
-            const uint32_t neighbor_dist = (neighbor.row == 0 || neighbor.col == 0) ? 1000 : score_diagonal;
-            neighbor.row += next_coord.row;
-            neighbor.col += next_coord.col;
-            if (neighbor.row >= 0 && neighbor.row < GridResolution &&
-                neighbor.col >= 0 && neighbor.col < GridResolution)
-            {
-                GridNode& neighbor_info = heap_score[neighbor.row][neighbor.col];
-                if ((*grid)[neighbor.row][neighbor.col])
-                {
-                    continue; // not a neighbor
-                }
-                if (neighbor_info.state == GNS_CHECKED)
-                {
-                    continue;
-                }
-
-                const uint32_t neighbor_score = score + neighbor_dist;
-                if (neighbor_info.score > neighbor_score)
-                {
-                    if (neighbor_info.state == GNS_NOT_FOUND)
-                    {
-                        ++num_discovered;
-                    }
-
-                    heap_score[neighbor.row][neighbor.col] = GridNode{ neighbor_score, (int8_t)i, GNS_FOUND };
-                    prediction.Push(ScoredCoord{ neighbor_score + heuristic(neighbor), neighbor });
-                }
-            }
-        }
-    }
-
-    Coord next_coord = prediction.Top().second;
-    const float distance = nMath::Max(FLT_EPSILON, heap_score[next_coord.row][next_coord.col].score / (1000.f * GridCellsPerMeter));
-    const float geometric_attenuation = nMath::Min(1.f, 1.f / distance);
-
-    if (!capture_debug)
-    {
-        (*grid_cache)[receiver_coord.row][receiver_coord.col] = geometric_attenuation;
-    }
-    if (capture_debug)
-    {
-        const int grid_half = (int)GridResolution / 2;
-        Coord coord = next_coord;
-        while (heap_score[coord.row][coord.col].link_index >= 0)
-        {
-            GridNode& coord_info = heap_score[coord.row][coord.col];
-            Coord incoming_coord = coord;
-            incoming_coord.row -= neighbors[coord_info.link_index].row;
-            incoming_coord.col -= neighbors[coord_info.link_index].col;
-            nMath::LineSegment segment{
-                { ((float)coord.col - grid_half) / GridCellsPerMeter, ((float)coord.row - grid_half) / GridCellsPerMeter, 0.f },
-                { ((float)incoming_coord.col - grid_half) / GridCellsPerMeter, ((float)incoming_coord.row - grid_half) / GridCellsPerMeter, 0.f }
-            };
-            CaptureDebug<capture_debug>(segment);
-            coord = incoming_coord;
-        }
-    }
-    return geometric_attenuation;
-}
-#endif
-
 PlannerAStar::PlannerAStar()
 {
     grid = std::make_unique<GeometryGrid>();
     grid_cache = std::make_unique<GeometryGridCache>();
 }
 
-void PlannerAStar::Plan(const RoomGeometry& room, const nMath::Vector& source)
+void PlannerAStar::Preprocess(const RoomGeometry& room)
 {
-    std::fill_n(&(*grid_cache)[0][0], GridResolution * GridResolution, -1.f);
     std::fill_n(&(*grid)[0][0], GridResolution * GridResolution, false);
 
     auto& walls = room.Walls();
@@ -614,6 +367,11 @@ void PlannerAStar::Plan(const RoomGeometry& room, const nMath::Vector& source)
             }
         }
     }
+}
+
+void PlannerAStar::Plan(const nMath::Vector& source)
+{
+    std::fill_n(&(*grid_cache)[0][0], GridResolution * GridResolution, -1.f);
 
     //if (grid_source.x < 0 || grid_source.y < 0 ||
     //    grid_receiver.x < 0 || grid_receiver.y < 0 ||
@@ -840,4 +598,19 @@ float PlannerAStar::Simulate(const nMath::Vector& receiver) const
     }
 
     return sum;
+}
+
+void PlannerWave::Plan(const nMath::Vector& _source, const float _frequency, const float _time_scale)
+{
+    source = _source;
+    frequency = _frequency;
+    time_factor = 1.f / _time_scale;
+}
+
+float PlannerWave::Simulate(const nMath::Vector& _receiver, const float _time_ms) const
+{
+    const float distance = nMath::Length(_receiver - source);
+    const float angle = 2.f * (float)M_PI * frequency;
+    const float shift = angle * distance / 340.f;
+    return fabsf(cosf(angle * (_time_ms * time_factor / 1000.f) + shift));
 }

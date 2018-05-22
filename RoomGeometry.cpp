@@ -611,6 +611,6 @@ float PlannerWave::Simulate(const nMath::Vector& _receiver, const float _time_ms
 {
     const float distance = nMath::Length(_receiver - source);
     const float angle = 2.f * (float)M_PI * frequency;
-    const float shift = angle * distance / 340.f;
+    const float shift = angle * -distance / 340.f;
     return fabsf(cosf(angle * (_time_ms * time_factor / 1000.f) + shift));
 }

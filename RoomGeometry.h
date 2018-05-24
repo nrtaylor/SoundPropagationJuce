@@ -135,9 +135,11 @@ public:
     {
         Plan(nMath::Vector{ 0.f,0.f,0.f }, 0.f, 1.f);
     }
+    void Preprocess(const RoomGeometry& room);
     void Plan(const nMath::Vector& _source, const float _frequency, const float _time_scale);
-    float Simulate(const nMath::Vector& receiver, const float time_ms) const;
+    float Simulate(const RoomGeometry& room, const nMath::Vector& receiver, const float time_ms) const;
 private:
+    std::vector<nMath::LineSegment> walls;
     nMath::Vector source;
     float frequency;
     float time_factor;

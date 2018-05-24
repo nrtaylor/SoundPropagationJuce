@@ -201,7 +201,7 @@ MainComponent::MainComponent() :
         combo_room.addItem("Empty", static_cast<int>(rooms.size()));
         combo_room.setSelectedId(1);
     }
-    // Square
+    // Rect
     {
         std::shared_ptr<RoomGeometry> room = std::make_shared<RoomGeometry>(RoomGeometry());
         room->AddWall({ -12.f,  8.f, 0.f }, { 12.f,  8.f, 0.f });
@@ -209,7 +209,17 @@ MainComponent::MainComponent() :
         room->AddWall({ 12.f, -8.f, 0.f }, { -12.f, -8.f, 0.f });
         room->AddWall({ -12.f, -8.f, 0.f }, { -12.f,  8.f, 0.f });
         rooms.emplace_back(room);
-        combo_room.addItem("Square", static_cast<int>(rooms.size()));
+        combo_room.addItem("Rectangular", static_cast<int>(rooms.size()));
+    }
+    // Rect Bigger
+    {
+        std::shared_ptr<RoomGeometry> room = std::make_shared<RoomGeometry>(RoomGeometry());
+        room->AddWall({ -20.f,  16.f, 0.f }, { 20.f,  16.f, 0.f });
+        room->AddWall({ 20.f,  16.f, 0.f }, { 20.f, -16.f, 0.f });
+        room->AddWall({ 20.f, -16.f, 0.f }, { -20.f, -16.f, 0.f });
+        room->AddWall({ -20.f, -16.f, 0.f }, { -20.f,  16.f, 0.f });
+        rooms.emplace_back(room);
+        combo_room.addItem("Rect Bigger", static_cast<int>(rooms.size()));
     }
     // Wall
     {
@@ -387,7 +397,7 @@ void MainComponent::paint (Graphics& _g)
         PaintRayCasts(_g, bounds, zoom_factor);
     }
 
-    PaintEmitter(_g, bounds, zoom_factor);
+    //PaintEmitter(_g, bounds, zoom_factor);
 }
 
 void MainComponent::PaintEmitter(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const
@@ -673,6 +683,10 @@ void MainComponent::update()
                     }
                     else
                     {
+                        if (perform_refresh)
+                        {
+                            planner_wave->Preprocess(*room);
+                        }
                         planner_wave->Plan(emitter_pos, test_frequency.load(), time_scale.load());
                     }
                 }
@@ -698,7 +712,7 @@ void MainComponent::update()
                         float energy = using_planner ?
                             (simulation_method == SoundPropagation::MethodType::Method_Pathfinding ?
                              planner_astar->Simulate(pixel_to_world) 
-                                : planner_wave->Simulate(pixel_to_world, time_now)) 
+                                : planner_wave->Simulate(*room, pixel_to_world, time_now)) 
                              : room->Simulate(emitter_pos, pixel_to_world, simulation_method);
                         if (simulation_compare_to != SoundPropagation::Method_Off)
                         {
@@ -735,7 +749,7 @@ void MainComponent::update()
 
                         const uint8 colour = contour_color > 0 ?
                             (uint8)contour_color :
-                            (uint8)jmin<uint32>(255, (uint32)(255.f*energy));
+                            (uint8)jmin<uint32>(255, (uint32)(255.f*jmax<float>(0.f, energy)));
                         *pixel++ = colour;
                         *pixel++ = colour;
                         *pixel++ = colour;

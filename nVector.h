@@ -73,6 +73,25 @@ namespace nMath
         return sqrtf(Dot(v, v));
     }
 
+    inline Vector Project(const LineSegment& segment, const Vector& v)
+    {
+        Vector projected = v - segment.start;
+        Vector s_dir = segment.end - segment.start;
+        const float proportion = Dot(projected, s_dir);
+
+        if (proportion <= 0.f)
+        {
+            return segment.start;
+        }
+        const float length_sq = LengthSquared(s_dir);
+        if (proportion >= length_sq)
+        {
+            return segment.end;
+        }
+        projected = (s_dir * (proportion / length_sq)) + segment.start;
+        return projected;
+    }
+
     inline Vector Rotate2D(const Vector& v, const float angle_rads)
     {
         return Vector{

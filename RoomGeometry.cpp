@@ -607,10 +607,41 @@ void PlannerWave::Plan(const nMath::Vector& _source, const float _frequency, con
     time_factor = 1.f / _time_scale;
 }
 
-float PlannerWave::Simulate(const nMath::Vector& _receiver, const float _time_ms) const
+void PlannerWave::Preprocess(const RoomGeometry& room)
 {
+    walls = room.Walls();
+}
+
+float PlannerWave::Simulate(const RoomGeometry& room, const nMath::Vector& _receiver, const float _time_ms) const
+{
+    if (room.Intersects(nMath::LineSegment{ source, _receiver }))
+    {
+        return 0.f;
+    }
+
+    std::vector<nMath::Vector> first_reflections; first_reflections.reserve(walls.size());
+
+    for (const nMath::LineSegment& wall : walls) // TODO: Move to plan
+    {
+        nMath::Vector&& reflection = nMath::Project(wall, source);
+        first_reflections.emplace_back(reflection);
+    }
+
     const float distance = nMath::Length(_receiver - source);
     const float angle = 2.f * (float)M_PI * frequency;
     const float shift = angle * -distance / 340.f;
-    return fabsf(cosf(angle * (_time_ms * time_factor / 1000.f) + shift));
+    const float geometric_attenuation = nMath::Min(1.f, 1.f / distance);
+    float value = geometric_attenuation * (1.f + 0.5f * cosf(angle * (_time_ms * time_factor / 1000.f) + shift)); // TODO: Normalization on gfx side
+
+    for (const nMath::Vector& v : first_reflections)
+    {
+        const float first_distance = nMath::Length(_receiver - v);
+        const float first_shift = angle * -(first_distance) / 340.f;
+        const float first_geometric_attenuation = nMath::Min(1.f, 1.f / (first_distance + distance));
+        float first_value = first_geometric_attenuation * (1.f + 0.5f * sinf(angle * (_time_ms * time_factor / 1000.f) + first_shift)); // TODO: Normalization on gfx side
+        value += first_value;
+    }
+
+    const float gain = 0.9f;
+    return value * gain;
 }

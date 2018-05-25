@@ -58,6 +58,7 @@ MainComponent::MainComponent() :
     show_contours = false;
     flag_refresh_image = false;
     flag_update_working = false;
+    flag_gamma_correct = false;
 
     ray_cast_collector = std::make_unique<RayCastCollector>();
     mutex_ray_cast_collector = std::make_unique<std::mutex>();
@@ -101,19 +102,28 @@ MainComponent::MainComponent() :
     addAndMakeVisible(&button_show_spl);
     button_show_spl.setButtonText("Draw SPL");
     button_show_spl.addListener(this);
+    button_show_spl.onClick = [this]() { show_spl = button_show_spl.getToggleState(); };
 
     addAndMakeVisible(&button_show_ray_casts);
     button_show_ray_casts.setButtonText("Ray Casts");
     button_show_ray_casts.addListener(this);
+    button_show_ray_casts.onClick = [this]() { show_ray_casts = button_show_ray_casts.getToggleState(); };
 
     addAndMakeVisible(&button_show_grid);
     button_show_grid.setButtonText("Draw Grid");
     button_show_grid.addListener(this);
+    button_show_grid.onClick = [this]() { show_grid = button_show_grid.getToggleState(); };
 
     addAndMakeVisible(&button_show_contours);
     button_show_contours.setButtonText("Contours");
     button_show_contours.addListener(this);
+    button_show_contours.onClick = [this]() { show_contours = button_show_contours.getToggleState(); };
 
+    addAndMakeVisible(&button_gamma_correct);
+    button_gamma_correct.setButtonText("Gamma");
+    button_gamma_correct.addListener(this);
+    button_gamma_correct.onClick = [this]() { flag_gamma_correct = button_gamma_correct.getToggleState(); };
+    
     addAndMakeVisible(&slider_spl_freq);
     slider_spl_freq.setRange(20.0, 20000.0, 0.5);
     slider_spl_freq.setTextValueSuffix(" Hz");
@@ -128,11 +138,11 @@ MainComponent::MainComponent() :
 
     addAndMakeVisible(&slider_time_scale);
     slider_time_scale.setRange(1.0, 1000.0, 1.0);
-    slider_time_scale.setTextValueSuffix(" %");
-    slider_time_scale.setValue(1.0);
+    slider_time_scale.setTextValueSuffix(" x");
+    slider_time_scale.setValue(340.0);
     slider_time_scale.setSkewFactorFromMidPoint(100.0);
     slider_time_scale.addListener(this);
-    time_scale = 1.f;
+    time_scale = 340.f;
 
     addAndMakeVisible(&label_time_scale);
     label_time_scale.setText("Time Stretch", dontSendNotification);
@@ -174,7 +184,7 @@ MainComponent::MainComponent() :
 
     // Make sure you set the size of the component after
     // you add any child components.
-    setSize (800, 600);
+    setSize (1020, 600);
 
     atmospheric_filters[0] = std::make_unique<nDSP::Butterworth1Pole>();
     atmospheric_filters[0]->bypass = true;
@@ -220,6 +230,22 @@ MainComponent::MainComponent() :
         room->AddWall({ -20.f, -16.f, 0.f }, { -20.f,  16.f, 0.f });
         rooms.emplace_back(room);
         combo_room.addItem("Rect Bigger", static_cast<int>(rooms.size()));
+    }
+    // Rect and Rect
+    {
+        std::shared_ptr<RoomGeometry> room = std::make_shared<RoomGeometry>(RoomGeometry());
+        room->AddWall({ -20.f,  16.f, 0.f }, { 20.f,  16.f, 0.f });
+        room->AddWall({ 20.f,  16.f, 0.f }, { 20.f, -16.f, 0.f });
+        room->AddWall({ 20.f, -16.f, 0.f }, { -20.f, -16.f, 0.f });
+        room->AddWall({ -20.f, -16.f, 0.f }, { -20.f,  16.f, 0.f });
+
+        room->AddWall({ -5.f,  5.f, 0.f }, { 5.f,  5.f, 0.f });
+        room->AddWall({ 5.f,  5.f, 0.f }, { 5.f, -5.f, 0.f });
+        room->AddWall({ 5.f, -5.f, 0.f }, { -5.f, -5.f, 0.f });
+        room->AddWall({ -5.f, -5.f, 0.f }, { -5.f,  5.f, 0.f });
+
+        rooms.emplace_back(room);
+        combo_room.addItem("Rect and column", static_cast<int>(rooms.size()));
     }
     // Wall
     {
@@ -514,9 +540,10 @@ void MainComponent::resized()
     button_show_ray_casts.setBounds(new_width - 104, 200 + 68, 200, 20);
     button_show_grid.setBounds(new_width - 202, 200 + 90, 200, 20);
     button_show_contours.setBounds(new_width - 104, 200 + 90, 200, 20);
-    slider_spl_freq.setBounds(new_width - 202, 200 + 112, 200, 20);
-    slider_time_scale.setBounds(new_width - 202, 200 + 134, 200, 20);
-    group_atmosphere.setBounds(new_width - 244, 200 + 164, 238, 116);
+    button_gamma_correct.setBounds(new_width - 104, 200 + 112, 200, 20);
+    slider_spl_freq.setBounds(new_width - 202, 200 + 134, 200, 20);
+    slider_time_scale.setBounds(new_width - 202, 200 + 156, 200, 20);
+    group_atmosphere.setBounds(new_width - 244, 200 + 174, 238, 116);
 }
 
 // Audio Component
@@ -747,9 +774,15 @@ void MainComponent::update()
                             previous_row[j] = energy;
                         }
 
+                        energy = jmax<float>(0.f, energy);
+                        if (flag_gamma_correct.load())
+                        {
+                            energy = sqrtf(energy);
+                        }
+
                         const uint8 colour = contour_color > 0 ?
                             (uint8)contour_color :
-                            (uint8)jmin<uint32>(255, (uint32)(255.f*jmax<float>(0.f, energy)));
+                            (uint8)jmin<uint32>(255, (uint32)(255.f*energy));
                         *pixel++ = colour;
                         *pixel++ = colour;
                         *pixel++ = colour;
@@ -817,22 +850,7 @@ void MainComponent::sliderValueChanged(Slider* slider)
 
 void MainComponent::buttonClicked(Button* buttonClicked)
 {
-    if (buttonClicked == &button_show_spl)
-    {
-        show_spl = button_show_spl.getToggleState();
-    }
-    else if (buttonClicked == &button_show_ray_casts)
-    {
-        show_ray_casts = button_show_ray_casts.getToggleState();
-    }
-    else if (buttonClicked == &button_show_grid)
-    {
-        show_grid = button_show_grid.getToggleState();
-    }
-    else if (buttonClicked == &button_show_contours)
-    {
-        show_contours = button_show_contours.getToggleState();
-    }
+    (void)buttonClicked;
 }
 
 void MainComponent::comboBoxChanged(ComboBox* comboBoxThatHasChanged)

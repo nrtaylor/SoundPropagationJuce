@@ -139,6 +139,7 @@ public:
     void Plan(const nMath::Vector& _source, const float _frequency, const float _time_scale);
     float Simulate(const RoomGeometry& room, const nMath::Vector& receiver, const float time_ms) const;
 private:
+    std::vector<nMath::Vector> first_reflections;
     std::vector<nMath::LineSegment> walls;
     nMath::Vector source;
     float frequency;

@@ -605,6 +605,14 @@ void PlannerWave::Plan(const nMath::Vector& _source, const float _frequency, con
     source = _source;
     frequency = _frequency;
     time_factor = 1.f / _time_scale;
+
+    first_reflections.clear();
+    first_reflections.reserve(walls.size());
+    for (const nMath::LineSegment& wall : walls)
+    {
+        nMath::Vector&& reflection = nMath::Project(wall, source);
+        first_reflections.emplace_back(reflection);
+    }
 }
 
 void PlannerWave::Preprocess(const RoomGeometry& room)
@@ -617,14 +625,6 @@ float PlannerWave::Simulate(const RoomGeometry& room, const nMath::Vector& _rece
     if (room.Intersects(nMath::LineSegment{ source, _receiver }))
     {
         return 0.f;
-    }
-
-    std::vector<nMath::Vector> first_reflections; first_reflections.reserve(walls.size());
-
-    for (const nMath::LineSegment& wall : walls) // TODO: Move to plan
-    {
-        nMath::Vector&& reflection = nMath::Project(wall, source);
-        first_reflections.emplace_back(reflection);
     }
 
     const float distance = nMath::Length(_receiver - source);

@@ -1,17 +1,21 @@
 # SoundPropagationJuce
 Juce App for setting up my personal test bed for sound propagation ideas.
 
+See branch "First-2D-Demo" for the last stable commit.
+
 Current Stage:
-- Cleaning up/optimizing an A* search from receiver to source as an estimated propagation distance.
+- First frequency and time dependent modes added.
+- Refactoring after adding "planners" to handle simulation instead of the rooms.
 
 Next Stage:
-- New mode that use "edges" (endpoints or concave angles) as nodes for finding multiple propagation paths.
-- Refactor geometric attenuation out of Simulate and integrate the atmospheric attenuation based on the frequecny slider.
+- Thinking about beginning FEM set-up.
+- Continue to refactor.
 
 Known limitations to fix later:
 - Audio files are hardcoded.
 - The apps screen dimenisions dictates the resolution of the generated image used to display results.
 - Receiver location is fixed at 0,0.
+- Frequency mode does not change audio.
 
 ![alt text](/Images/SoundPropagation-A_Star-4_2018.png)
 ![alt text](/Images/SoundPropagation-Planned_Features-4_2018.png)

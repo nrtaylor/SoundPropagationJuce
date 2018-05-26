@@ -186,6 +186,10 @@ MainComponent::MainComponent() :
     // you add any child components.
     setSize (1020, 600);
 
+
+    receiver_x = 300;
+    receiver_y = 300;
+
     atmospheric_filters[0] = std::make_unique<nDSP::Butterworth1Pole>();
     atmospheric_filters[0]->bypass = true;
     atmospheric_filters[1] = std::make_unique<nDSP::Butterworth1Pole>();
@@ -423,7 +427,7 @@ void MainComponent::paint (Graphics& _g)
         PaintRayCasts(_g, bounds, zoom_factor);
     }
 
-    //PaintEmitter(_g, bounds, zoom_factor);
+    PaintEmitter(_g, bounds, zoom_factor);
 }
 
 void MainComponent::PaintEmitter(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const
@@ -432,7 +436,7 @@ void MainComponent::PaintEmitter(Graphics& _g, const Rectangle<int> _bounds, con
     const nMath::Vector center{ min_extent / 2.f, min_extent / 2.f, 0.f };
 
     _g.setColour(Colour::fromRGB(0xFF, 0xFF, 0xFF));
-    _g.fillEllipse(center.x - 1.f, center.y - 1.f, 2, 2);
+    _g.fillEllipse(receiver_x - 1.f, receiver_y - 1.f, 2, 2);
 
     nMath::Vector emitter_pos;
     {
@@ -527,7 +531,8 @@ void MainComponent::resized()
         image_next = ImageHelper::SquareImage(bounds);
     }
 
-    const int32 new_width = getWidth();
+    const int32 margin = 4;
+    const int32 new_width = getWidth() - margin;
     combo_method.setBounds(new_width - 202, 200 - 90, 200, 20);
     combo_compare_to_method.setBounds(new_width - 202, 200 - 68, 200, 20);
     combo_selected_sound.setBounds(new_width - 202, 200 - 46, 200, 20);
@@ -556,6 +561,12 @@ void MainComponent::prepareToPlay(int samplesPerBlockExpected,
 
 void MainComponent::releaseResources()
 {
+}
+
+void MainComponent::mouseDown(const MouseEvent& event)
+{
+    receiver_x = event.getMouseDownX();
+    receiver_y = event.getMouseDownY();
 }
 
 void MainComponent::getNextAudioBlock(const AudioSourceChannelInfo& bufferToFill)
@@ -657,7 +668,11 @@ void MainComponent::update()
             ray_cast_collector->Reset();
             room->SwapCollector(ray_cast_collector);
         }
-        const float simulated_gain = room->Simulate<true>(emitter_pos, { 0.f, 0.f, 0.f }, simulation_method);
+        const float min_extent = (float)std::min(getBounds().getWidth(), getBounds().getHeight());
+        const nMath::Vector center{ min_extent / 2.f, min_extent / 2.f, 0.f };
+        const float inv_zoom_factor = 1.f/10.f;
+        const nMath::Vector receiever_pos = { (receiver_x - center.x) * inv_zoom_factor , (receiver_y - center.y) * -inv_zoom_factor, 0.f};
+        const float simulated_gain = room->Simulate<true>(emitter_pos, receiever_pos, simulation_method);
         moving_emitter->ComputeGain(simulated_gain);
         if (ray_casts)
         {
@@ -686,7 +701,7 @@ void MainComponent::update()
             std::thread worker = std::thread([this, simulation_method, emitter_pos, overlay_contours, perform_refresh, time_now] {
                 std::lock_guard<std::mutex> guard(mutex_image);
                 std::shared_ptr<RoomGeometry> room = current_room;
-                const SoundPropagation::MethodType simulation_compare_to = current_compare_to_method.load();                
+                const SoundPropagation::MethodType simulation_compare_to = current_compare_to_method.load();
                 const nMath::Vector center{ image_next.getWidth() / 2.f, image_next.getWidth() / 2.f, 0.f };
                 const float inv_zoom_factor = 1.f / 10.f;
 

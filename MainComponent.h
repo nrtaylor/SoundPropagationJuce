@@ -71,6 +71,9 @@ public:
     void releaseResources() override;
     void getNextAudioBlock(const AudioSourceChannelInfo& bufferToFill) override;
 
+    //==============================================================================
+    void mouseDown(const MouseEvent& event) override;
+
     // AudioAppComponent
     AudioDeviceManager deviceManager;
     void setAudioChannels(int numInputChannels, int numOutputChannels, const XmlElement* const xml = nullptr);
@@ -107,6 +110,9 @@ private:
     float sample_rate;
 
     uint32 initialized;
+
+    std::atomic_int32_t receiver_x;
+    std::atomic_int32_t receiver_y;
 
     // Gui
     ComboBox combo_room;

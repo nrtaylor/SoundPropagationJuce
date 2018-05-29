@@ -67,6 +67,20 @@ MainComponent::MainComponent() :
 
     setAudioChannels(0, 2);
     setWantsKeyboardFocus(true);
+
+    button_source[0].setButtonText("Source 1");
+    button_source[0].setToggleState(true, dontSendNotification);
+    button_source[0].onClick = [this]() { label_selected_sound.setText("Source 1", dontSendNotification); };
+    button_source[1].setButtonText("Source 2");
+    button_source[1].onClick = [this]() { label_selected_sound.setText("Source 2", dontSendNotification); };
+    button_source[2].setButtonText("Source 3");
+    button_source[2].onClick = [this]() { label_selected_sound.setText("Source 3", dontSendNotification); };
+    for (int i = 0; i < 3; ++i)
+    {
+        button_source[i].setRadioGroupId(1001);
+        button_source[i].setClickingTogglesState(true);
+        addAndMakeVisible(button_source[i]);
+    }
     
     addAndMakeVisible(&slider_gain);
     slider_gain.setRange(0.0, 2.0, 0.05);
@@ -185,7 +199,6 @@ MainComponent::MainComponent() :
     // Make sure you set the size of the component after
     // you add any child components.
     setSize (1020, 600);
-
 
     receiver_x = 300;
     receiver_y = 300;
@@ -364,7 +377,7 @@ void MainComponent::initialise()
         combo_selected_sound.addListener(this);
 
         addAndMakeVisible(&label_selected_sound);
-        label_selected_sound.setText("Source", dontSendNotification);
+        label_selected_sound.setText("Source 1", dontSendNotification);
         label_selected_sound.attachToComponent(&combo_selected_sound, true);
     }    
 
@@ -545,13 +558,24 @@ void MainComponent::resized()
         return frame.removeFromTop(height).reduced(padding); 
     };
     
-    combo_method.setBounds(frame_next());
-    combo_compare_to_method.setBounds(frame_next());
+    juce::Rectangle<int>  frame_sources = frame_next();
+    int sources_width = frame_sources.getWidth() / 3;
+    for (int i = 0; i < 3; ++i)
+    {
+        button_source[i].setBounds(frame_sources.removeFromLeft(sources_width).reduced(2, 0));
+    }
+
+    // Source
     combo_selected_sound.setBounds(frame_next());
-    combo_room.setBounds(frame_next());
+    slider_spl_freq.setBounds(frame_next());
     slider_gain.setBounds(frame_next());
     slider_freq.setBounds(frame_next());
     slider_radius.setBounds(frame_next());
+
+    // Global
+    combo_method.setBounds(frame_next());
+    combo_compare_to_method.setBounds(frame_next());
+    combo_room.setBounds(frame_next());
 
     juce::Rectangle<int> frame_button_l = frame_next();
     juce::Rectangle<int> frame_button_r = frame_button_l.removeFromRight(frame_button_l.getWidth() / 2);
@@ -567,7 +591,6 @@ void MainComponent::resized()
     frame_button_r = frame_button_l.removeFromRight(frame_button_l.getWidth() / 2);
     button_gamma_correct.setBounds(frame_button_r);
 
-    slider_spl_freq.setBounds(frame_next());
     slider_time_scale.setBounds(frame_next());
 
     juce::Rectangle<int> frame_atmosphere = frame.removeFromTop(116).reduced(2);

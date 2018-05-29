@@ -150,6 +150,8 @@ private:
     ToggleButton button_show_contours;
     ToggleButton button_gamma_correct;
 
+    TextButton button_source[3];
+
     Slider slider_spl_freq;
     Label label_spl_freq;
     std::atomic<float> test_frequency;

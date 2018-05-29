@@ -630,7 +630,7 @@ float PlannerWave::Simulate(const RoomGeometry& room, const nMath::Vector& _rece
     const float distance = nMath::Length(_receiver - source);
     const float angle = 2.f * (float)M_PI * frequency;
     const float shift = angle * -distance / 340.f;
-    const float geometric_attenuation = nMath::Min(1.f, 1.f / distance);
+    const float geometric_attenuation = nMath::Min(1.f, 1.f / distance);    
     float value = geometric_attenuation * (1.f + 0.5f * cosf(angle * (_time_ms * time_factor / 1000.f) + shift)); // TODO: Normalization on gfx side
 
     for (const nMath::Vector& v : first_reflections)

@@ -150,7 +150,7 @@ MainComponent::MainComponent() :
 
     addAndMakeVisible(&group_atmosphere);
     group_atmosphere.setText("Atmosphere");
-    
+
     slider_temperature.setBounds(20, 22, 198, 22);
     slider_temperature.setRange(-20.0, 120.0, 1.0);
     slider_temperature.setTextValueSuffix(" F");
@@ -532,23 +532,47 @@ void MainComponent::resized()
     }
 
     const int32 margin = 4;
-    const int32 new_width = getWidth() - margin;
-    combo_method.setBounds(new_width - 202, 200 - 90, 200, 20);
-    combo_compare_to_method.setBounds(new_width - 202, 200 - 68, 200, 20);
-    combo_selected_sound.setBounds(new_width - 202, 200 - 46, 200, 20);
-    combo_room.setBounds(new_width - 202, 200 - 24, 200, 20);
 
-    slider_gain.setBounds(new_width - 202, 200, 200, 20);
-    slider_freq.setBounds(new_width - 202, 200 + 22, 200, 20);
-    slider_radius.setBounds(new_width - 202, 200 + 46, 200, 20);
-    button_show_spl.setBounds(new_width - 202, 200 + 68, 200, 20);
-    button_show_ray_casts.setBounds(new_width - 104, 200 + 68, 200, 20);
-    button_show_grid.setBounds(new_width - 202, 200 + 90, 200, 20);
-    button_show_contours.setBounds(new_width - 104, 200 + 90, 200, 20);
-    button_gamma_correct.setBounds(new_width - 104, 200 + 112, 200, 20);
-    slider_spl_freq.setBounds(new_width - 202, 200 + 134, 200, 20);
-    slider_time_scale.setBounds(new_width - 202, 200 + 156, 200, 20);
-    group_atmosphere.setBounds(new_width - 244, 200 + 174, 238, 116);
+    juce::Rectangle<int> frame = getLocalBounds();
+    frame.removeFromRight(margin);
+    frame.removeFromTop(90);
+    frame = frame.removeFromRight(204);
+
+    auto frame_next = [&frame]() -> decltype(frame) 
+    { 
+        const int32 height = 24;
+        const int32 padding = 2;
+        return frame.removeFromTop(height).reduced(padding); 
+    };
+    
+    combo_method.setBounds(frame_next());
+    combo_compare_to_method.setBounds(frame_next());
+    combo_selected_sound.setBounds(frame_next());
+    combo_room.setBounds(frame_next());
+    slider_gain.setBounds(frame_next());
+    slider_freq.setBounds(frame_next());
+    slider_radius.setBounds(frame_next());
+
+    juce::Rectangle<int> frame_button_l = frame_next();
+    juce::Rectangle<int> frame_button_r = frame_button_l.removeFromRight(frame_button_l.getWidth() / 2);
+    button_show_spl.setBounds(frame_button_l);
+    button_show_ray_casts.setBounds(frame_button_r);
+    
+    frame_button_l = frame_next();
+    frame_button_r = frame_button_l.removeFromRight(frame_button_l.getWidth() / 2);
+    button_show_grid.setBounds(frame_button_l);
+    button_show_contours.setBounds(frame_button_r);
+
+    frame_button_l = frame_next();
+    frame_button_r = frame_button_l.removeFromRight(frame_button_l.getWidth() / 2);
+    button_gamma_correct.setBounds(frame_button_r);
+
+    slider_spl_freq.setBounds(frame_next());
+    slider_time_scale.setBounds(frame_next());
+
+    juce::Rectangle<int> frame_atmosphere = frame.removeFromTop(116).reduced(2);
+    frame_atmosphere.setLeft(frame_atmosphere.getX() - 40);
+    group_atmosphere.setBounds(frame_atmosphere);
 }
 
 // Audio Component
@@ -565,8 +589,13 @@ void MainComponent::releaseResources()
 
 void MainComponent::mouseDown(const MouseEvent& event)
 {
-    receiver_x = event.getMouseDownX();
-    receiver_y = event.getMouseDownY();
+    const float min_extent = (float)std::min(getBounds().getWidth(), getBounds().getHeight());
+    if (event.getMouseDownX() < min_extent &&
+        event.getMouseDownY() < min_extent)
+    {
+        receiver_x = event.getMouseDownX();
+        receiver_y = event.getMouseDownY();
+    }
 }
 
 void MainComponent::getNextAudioBlock(const AudioSourceChannelInfo& bufferToFill)

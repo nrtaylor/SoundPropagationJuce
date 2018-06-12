@@ -279,6 +279,18 @@ MainComponent::MainComponent() :
         rooms.emplace_back(room);
         combo_room.addItem("Slit", static_cast<int>(rooms.size()));
     }
+    // L Shaped
+    {
+        std::shared_ptr<RoomGeometry> room = std::make_shared<RoomGeometry>(RoomGeometry());
+        room->AddWall({ -24.f,  24.f, 0.f }, { -8.f,  24.f, 0.f });
+        room->AddWall({ -8.f,  24.f, 0.f }, { -8.f,  -8.f, 0.f });
+        room->AddWall({ -8.f,  -8.f, 0.f }, {  24.f,  -8, 0.f });
+        room->AddWall({ 24.f,  -8, 0.f }, { 24.f,  -20, 0.f });
+        room->AddWall({ 24.f,  -20, 0.f }, { -24.f,  -20, 0.f });
+        room->AddWall({ -24.f,  -20, 0.f }, { -24.f,  24, 0.f });
+        rooms.emplace_back(room);
+        combo_room.addItem("L Shaped", static_cast<int>(rooms.size()));
+    }
     // Two Slits
     {
         std::shared_ptr<RoomGeometry> room = std::make_shared<RoomGeometry>(RoomGeometry());

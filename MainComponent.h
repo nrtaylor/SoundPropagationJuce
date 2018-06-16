@@ -35,7 +35,7 @@ struct SoundBuffer
     }
 
     char name[256];
-    std::unique_ptr<AudioSampleBuffer> buffer;
+    std::shared_ptr<AudioSampleBuffer> buffer;
     int32 index;
 };
 
@@ -103,7 +103,7 @@ private:
 
     std::unique_ptr<PlannerWave> planner_wave;
     
-    std::array<SoundBuffer, 2> test_buffers;
+    std::array<SoundBuffer, 3> test_buffers;
     std::atomic_uint32_t selected_test_buffer;
     uint32 start_time;
 
@@ -151,6 +151,8 @@ private:
     ToggleButton button_gamma_correct;
 
     TextButton button_source[3];
+    TextButton button_loadfile;
+    Label label_loadfile;
 
     Slider slider_spl_freq;
     Label label_spl_freq;

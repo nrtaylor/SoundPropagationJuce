@@ -24,22 +24,30 @@ namespace ImageHelper
 
 namespace SoundBufferHelper
 {
-    void LoadFromFile(SoundBuffer& buffer, AudioFormatManager& format_manager, const char* file_name)
-    {
-        File file = File::getCurrentWorkingDirectory().getChildFile(file_name);
+    void LoadFromFile(SoundBuffer& buffer, AudioFormatManager& format_manager, const File& file)
+    {        
         std::unique_ptr<AudioFormatReader> reader(format_manager.createReaderFor(file));
 
+        buffer.index = -1;
         if (reader != nullptr)
         {
-            buffer.buffer = std::make_unique<AudioSampleBuffer>();
-            buffer.buffer->setSize(reader->numChannels, static_cast<int>(reader->lengthInSamples));
-            reader->read(buffer.buffer.get(),
+            std::shared_ptr<AudioSampleBuffer> samples = std::make_shared<AudioSampleBuffer>();
+            samples->setSize(reader->numChannels, static_cast<int>(reader->lengthInSamples));
+            reader->read(samples.get(),
                 0,
                 static_cast<int>(reader->lengthInSamples),
                 0,
                 true,
                 true);
+            buffer.buffer = samples;
+            buffer.index = 0;
         }
+    }
+
+    void LoadFromFile(SoundBuffer& buffer, AudioFormatManager& format_manager, const char* file_name)
+    {
+        const File file = File::getCurrentWorkingDirectory().getChildFile(file_name);
+        LoadFromFile(buffer, format_manager, file);
     }
 }
 
@@ -81,6 +89,21 @@ MainComponent::MainComponent() :
         button_source[i].setClickingTogglesState(true);
         addAndMakeVisible(button_source[i]);
     }
+
+    button_loadfile.setButtonText("...");
+    button_loadfile.onClick = [this]() {
+        FileChooser chooser("Select Sound File", File::getCurrentWorkingDirectory(), "*.wav;*.aiff");
+        if (chooser.browseForFileToOpen())
+        {
+            AudioFormatManager format_manager; format_manager.registerBasicFormats();
+            const File& file = chooser.getResult();
+            SoundBufferHelper::LoadFromFile(test_buffers[2], format_manager, file);
+            label_loadfile.setText(file.getFileName(), dontSendNotification);
+        }
+    };
+    addChildComponent(button_loadfile);
+    label_loadfile.setText("[None]", dontSendNotification);
+    addChildComponent(label_loadfile);
     
     addAndMakeVisible(&slider_gain);
     slider_gain.setRange(0.0, 2.0, 0.05);
@@ -379,8 +402,9 @@ void MainComponent::initialise()
         strcpy(test_buffers[1].name, "Two Tones");
         combo_selected_sound.addItem(test_buffers[1].name, 2);
 
-        combo_selected_sound.addItem("Frequency", 3);
-        combo_selected_sound.addItem("Off", 4);
+        combo_selected_sound.addItem("File", 3);
+        combo_selected_sound.addItem("Frequency", 4);
+        combo_selected_sound.addItem("Off", 5);
     }
 
     {
@@ -579,7 +603,13 @@ void MainComponent::resized()
 
     // Source
     combo_selected_sound.setBounds(frame_next());
-    slider_spl_freq.setBounds(frame_next());
+    const juce::Rectangle<int> frame_source_settings = frame_next();
+    {
+        juce::Rectangle<int> frame_source_file_settings = frame_source_settings;
+        button_loadfile.setBounds(frame_source_file_settings.removeFromRight(32));
+        label_loadfile.setBounds(frame_source_file_settings);
+    }
+    slider_spl_freq.setBounds(frame_source_settings);
     slider_gain.setBounds(frame_next());
     slider_freq.setBounds(frame_next());
     slider_radius.setBounds(frame_next());
@@ -650,9 +680,13 @@ void MainComponent::getNextAudioBlock(const AudioSourceChannelInfo& bufferToFill
     int samples_remaining = bufferToFill.numSamples;
     int sample_offset = bufferToFill.startSample;
     SoundBuffer& buffer_info = test_buffers[selected_buffer_id];
-    AudioSampleBuffer* buffer = buffer_info.buffer.get();
+    std::shared_ptr<AudioSampleBuffer> buffer = buffer_info.buffer;
     if (buffer == nullptr ||
         buffer->getNumChannels() <= 0)
+    {
+        return;
+    }
+    if (buffer_info.index < 0)
     {
         return;
     }
@@ -940,6 +974,18 @@ void MainComponent::comboBoxChanged(ComboBox* comboBoxThatHasChanged)
         if (next_id > 0)
         {
             selected_test_buffer = next_id - 1;
+            if (next_id == 3)
+            {
+                button_loadfile.setVisible(true);
+                label_loadfile.setVisible(true);
+                slider_spl_freq.setVisible(false);
+            }
+            else
+            {
+                button_loadfile.setVisible(false);
+                label_loadfile.setVisible(false);
+                slider_spl_freq.setVisible(true);
+            }
         }
     }
     else if (comboBoxThatHasChanged == &combo_room)

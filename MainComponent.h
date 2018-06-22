@@ -104,7 +104,7 @@ private:
     std::unique_ptr<PlannerWave> planner_wave;
     
     std::array<SoundBuffer, 3> test_buffers;
-    std::atomic_uint32_t selected_test_buffer;
+    std::atomic_int32_t selected_test_buffer;
     uint32 start_time;
 
     float sample_rate;
@@ -170,6 +170,13 @@ private:
 
     ComboBox combo_selected_sound;
     Label label_selected_sound;
+
+    enum SourceType : int32
+    {
+        SOURCE_OFF = 1,
+        SOURCE_FILE,
+        SOURCE_FREQUENCY
+    };
 
     void timerCallback() override;
 

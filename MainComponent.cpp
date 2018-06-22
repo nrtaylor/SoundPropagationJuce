@@ -97,7 +97,7 @@ MainComponent::MainComponent() :
         {
             AudioFormatManager format_manager; format_manager.registerBasicFormats();
             const File& file = chooser.getResult();
-            SoundBufferHelper::LoadFromFile(test_buffers[2], format_manager, file);
+            SoundBufferHelper::LoadFromFile(test_buffers[0], format_manager, file);
             label_loadfile.setText(file.getFileName(), dontSendNotification);
         }
     };
@@ -391,25 +391,14 @@ MainComponent::~MainComponent()
 
 //==============================================================================
 void MainComponent::initialise()
-{
-    {
-        AudioFormatManager format_manager; format_manager.registerBasicFormats();
-               
-        SoundBufferHelper::LoadFromFile(test_buffers[0], format_manager, "..\\..\\..\\lake_mono_2chnl.wav");
-        strcpy(test_buffers[0].name, "Lake");
-        combo_selected_sound.addItem(test_buffers[0].name, 1);
-        SoundBufferHelper::LoadFromFile(test_buffers[1], format_manager, "..\\..\\..\\test_tones.wav");
-        strcpy(test_buffers[1].name, "Two Tones");
-        combo_selected_sound.addItem(test_buffers[1].name, 2);
-
-        combo_selected_sound.addItem("File", 3);
-        combo_selected_sound.addItem("Frequency", 4);
-        combo_selected_sound.addItem("Off", 5);
-    }
+{    
+    combo_selected_sound.addItem("File", SOURCE_FILE);
+    combo_selected_sound.addItem("Frequency", SOURCE_FREQUENCY);
+    combo_selected_sound.addItem("Off", SOURCE_OFF);
 
     {
         MessageManagerLock lock;
-        combo_selected_sound.setSelectedId(1);
+        combo_selected_sound.setSelectedId(SOURCE_OFF);
         combo_selected_sound.addListener(this);
 
         addAndMakeVisible(&label_selected_sound);
@@ -671,7 +660,8 @@ void MainComponent::getNextAudioBlock(const AudioSourceChannelInfo& bufferToFill
         return;
     }
     const uint32 selected_buffer_id = selected_test_buffer.load();
-    if (selected_buffer_id >= test_buffers.size())
+    if (selected_buffer_id < 0 ||
+        selected_buffer_id >= test_buffers.size())
     {
         return;
     }
@@ -970,18 +960,19 @@ void MainComponent::comboBoxChanged(ComboBox* comboBoxThatHasChanged)
 {
     if (comboBoxThatHasChanged == &combo_selected_sound)
     {
-        const uint32 next_id = combo_selected_sound.getSelectedId();
+        const int32 next_id = combo_selected_sound.getSelectedId();
         if (next_id > 0)
         {
-            selected_test_buffer = next_id - 1;
-            if (next_id == 3)
+            if (next_id == SOURCE_FILE)
             {
+                selected_test_buffer = 0;
                 button_loadfile.setVisible(true);
                 label_loadfile.setVisible(true);
                 slider_spl_freq.setVisible(false);
             }
             else
             {
+                selected_test_buffer = -1;
                 button_loadfile.setVisible(false);
                 label_loadfile.setVisible(false);
                 slider_spl_freq.setVisible(true);

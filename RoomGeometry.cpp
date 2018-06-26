@@ -95,20 +95,6 @@ void RoomGeometry::AddWall(const nMath::Vector start, const nMath::Vector end)
     }
 }
 
-template<bool capture_debug>
-float RoomGeometry::Simulate(const nMath::Vector& source, const nMath::Vector& receiver, const SoundPropagation::MethodType method) const
-{
-    switch (method)
-    {
-    case SoundPropagation::Method_SpecularLOS:
-        return SimulateSpecularLOS<capture_debug>(source, receiver);
-    case SoundPropagation::Method_RayCasts:
-        return SimulateRayCasts<capture_debug>(source, receiver);
-    default:
-        return 0.f;
-    }
-}
-
 void RoomGeometry::SwapCollector(std::unique_ptr<RayCastCollector>& collector)
 {
     std::swap(ray_cast_collector, collector);
@@ -151,60 +137,6 @@ bool RoomGeometry::Intersects(const nMath::LineSegment& _line) const
     }
 
     return false;
-}
-
-template<bool capture_debug>
-float RoomGeometry::SimulateSpecularLOS(const nMath::Vector& source, const nMath::Vector& receiver) const
-{
-    if (Intersects<capture_debug>(nMath::LineSegment{ source, receiver }))
-    {
-        return 0.f;
-    }
-
-    const float distance = nMath::Max(FLT_EPSILON, nMath::Length(source - receiver));
-    const float geometric_attenuation = nMath::Min(1.f, 1.f / distance);
-    return geometric_attenuation;
-}
-
-template<bool capture_debug>
-float RoomGeometry::SimulateRayCasts(const nMath::Vector& source, const nMath::Vector& receiver) const
-{
-    nMath::Vector direction = source - receiver;
-    float distance = nMath::Length(direction);
-    if (Intersects<capture_debug>(nMath::LineSegment{ source, receiver }))
-    {
-        if (distance > FLT_EPSILON)
-        {
-            direction = direction / distance;
-            nMath::Vector ray_orth = { -direction.y, direction.x, 0.f };
-            nMath::Vector ray_orth_inv = -1.f * ray_orth;
-            if ((!Intersects<capture_debug>(nMath::LineSegment{ ray_orth + receiver, receiver }) &&
-                !Intersects<capture_debug>(nMath::LineSegment{ ray_orth + receiver, source })) ||
-                (!Intersects<capture_debug>(nMath::LineSegment{ ray_orth_inv + receiver, receiver }) &&
-                    !Intersects<capture_debug>(nMath::LineSegment{ ray_orth_inv + receiver, source })))
-            {
-                distance += 1.f;
-            }
-            else if ((!Intersects<capture_debug>(nMath::LineSegment{ ray_orth + source, source }) &&
-                !Intersects<capture_debug>(nMath::LineSegment{ ray_orth + source, receiver })) ||
-                (!Intersects<capture_debug>(nMath::LineSegment{ ray_orth_inv + source, source }) &&
-                    !Intersects<capture_debug>(nMath::LineSegment{ ray_orth_inv + source, receiver })))
-            {
-                distance += 1.f;
-            }
-            else
-            {
-                return 0.f;
-            }
-        }
-        else
-        {
-            return 0.f;
-        }
-    }
-
-    const float geometric_attenuation = nMath::Min(1.f, 1.f / nMath::Max(FLT_EPSILON, distance));
-    return geometric_attenuation;
 }
 
 template<class T, class Less>
@@ -292,11 +224,12 @@ PlannerAStar::PlannerAStar()
     grid_cache = std::make_unique<GeometryGridCache>();
 }
 
-void PlannerAStar::Preprocess(const RoomGeometry& room)
+void PlannerAStar::Preprocess(std::shared_ptr<const RoomGeometry> _room)
 {
+    room = _room;
     std::fill_n(&(*grid)[0][0], GridResolution * GridResolution, false);
 
-    auto& walls = room.Walls();
+    auto& walls = room->Walls();
     for (const nMath::LineSegment& ls : walls)
     {
         nMath::Vector start = ls.start;
@@ -369,7 +302,7 @@ void PlannerAStar::Preprocess(const RoomGeometry& room)
     }
 }
 
-void PlannerAStar::Plan(const nMath::Vector& source)
+void PlannerAStar::Plan(const SourceConfig& _config)
 {
     std::fill_n(&(*grid_cache)[0][0], GridResolution * GridResolution, -1.f);
 
@@ -382,7 +315,7 @@ void PlannerAStar::Plan(const nMath::Vector& source)
     //};
 
     const int grid_half = (int)GridResolution / 2;
-    const nMath::Vector grid_source = source * (float)GridCellsPerMeter + nMath::Vector{ (float)grid_half, (float)grid_half };
+    const nMath::Vector grid_source = _config.source * (float)GridCellsPerMeter + nMath::Vector{ (float)grid_half, (float)grid_half };
     source_coord = Coord{ (int)grid_source.y, (int)grid_source.x };
     for (int i = 0; i < GridResolution; ++i)
     {
@@ -525,10 +458,12 @@ float PlannerAStar::FindAStarDiscrete(const Coord& receiver_coord)
     return geometric_attenuation;
 }
 
-float PlannerAStar::Simulate(const nMath::Vector& receiver) const
+float PlannerAStar::Simulate(const nMath::Vector& _receiver, const float _time_ms) const
 {
+    (void)_time_ms;
+
     const int grid_half = (int)GridResolution / 2;
-    nMath::Vector grid_receiver = receiver * (float)GridCellsPerMeter + nMath::Vector{ (float)grid_half, (float)grid_half };
+    nMath::Vector grid_receiver = _receiver * (float)GridCellsPerMeter + nMath::Vector{ (float)grid_half, (float)grid_half };
 
     if (grid_receiver.x < 0 || grid_receiver.y < 0 ||        
         grid_receiver.x >= GridResolution || grid_receiver.y >= GridResolution)
@@ -600,13 +535,90 @@ float PlannerAStar::Simulate(const nMath::Vector& receiver) const
     return sum;
 }
 
-void PlannerWave::Plan(const nMath::Vector& _source, const float _frequency, const float _time_scale)
+void PlannerSpecularLOS::Preprocess(std::shared_ptr<const RoomGeometry> _room)
 {
-    source = _source;
-    frequency = _frequency;
-    time_factor = 1.f / _time_scale;
+    room = _room;
+}
+
+void PlannerSpecularLOS::Plan(const PropagationPlanner::SourceConfig& _config)
+{
+    source = _config.source;
+}
+
+float PlannerSpecularLOS::Simulate(const nMath::Vector& _receiver, const float _time_ms) const
+{
+    (void)_time_ms;
+
+    if (room->Intersects<false>(nMath::LineSegment{ source, _receiver }))
+    {
+        return 0.f;
+    }
+
+    const float distance = nMath::Max(FLT_EPSILON, nMath::Length(source - _receiver));
+    const float geometric_attenuation = nMath::Min(1.f, 1.f / distance);
+    return geometric_attenuation;
+}
+
+void PlannerRayCasts::Plan(const PropagationPlanner::SourceConfig& _config)
+{
+    source = _config.source;
+}
+
+void PlannerRayCasts::Preprocess(std::shared_ptr<const RoomGeometry> _room)
+{
+    room = _room;
+}
+
+float PlannerRayCasts::Simulate(const nMath::Vector& _receiver, const float _time_ms) const
+{
+    (void)_time_ms;
+
+    nMath::Vector direction = source - _receiver;
+    float distance = nMath::Length(direction);
+    if (room->Intersects<false>(nMath::LineSegment{ source, _receiver }))
+    {
+        if (distance > FLT_EPSILON)
+        {
+            direction = direction / distance;
+            nMath::Vector ray_orth = { -direction.y, direction.x, 0.f };
+            nMath::Vector ray_orth_inv = -1.f * ray_orth;
+            if ((!room->Intersects<false>(nMath::LineSegment{ ray_orth + _receiver, _receiver }) &&
+                !room->Intersects<false>(nMath::LineSegment{ ray_orth + _receiver, source })) ||
+                (!room->Intersects<false>(nMath::LineSegment{ ray_orth_inv + _receiver, _receiver }) &&
+                    !room->Intersects<false>(nMath::LineSegment{ ray_orth_inv + _receiver, source })))
+            {
+                distance += 1.f;
+            }
+            else if ((!room->Intersects<false>(nMath::LineSegment{ ray_orth + source, source }) &&
+                !room->Intersects<false>(nMath::LineSegment{ ray_orth + source, _receiver })) ||
+                (!room->Intersects<false>(nMath::LineSegment{ ray_orth_inv + source, source }) &&
+                    !room->Intersects<false>(nMath::LineSegment{ ray_orth_inv + source, _receiver })))
+            {
+                distance += 1.f;
+            }
+            else
+            {
+                return 0.f;
+            }
+        }
+        else
+        {
+            return 0.f;
+        }
+    }
+
+    const float geometric_attenuation = nMath::Min(1.f, 1.f / nMath::Max(FLT_EPSILON, distance));
+    return geometric_attenuation;
+}
+
+void PlannerWave::Plan(const PropagationPlanner::SourceConfig& _config)
+{
+    source = _config.source;
+    frequency = _config.frequency;
+    time_factor = 1.f / _config.time_scale;
 
     first_reflections.clear();
+    auto& walls = room->Walls();
     first_reflections.reserve(walls.size());
     for (const nMath::LineSegment& wall : walls)
     {
@@ -615,14 +627,14 @@ void PlannerWave::Plan(const nMath::Vector& _source, const float _frequency, con
     }
 }
 
-void PlannerWave::Preprocess(const RoomGeometry& room)
+void PlannerWave::Preprocess(std::shared_ptr<const RoomGeometry> _room)
 {
-    walls = room.Walls();
+    room = _room;
 }
 
-float PlannerWave::Simulate(const RoomGeometry& room, const nMath::Vector& _receiver, const float _time_ms) const
+float PlannerWave::Simulate(const nMath::Vector& _receiver, const float _time_ms) const
 {
-    if (room.Intersects(nMath::LineSegment{ source, _receiver }))
+    if (room->Intersects(nMath::LineSegment{ source, _receiver }))
     {
         return 0.f;
     }

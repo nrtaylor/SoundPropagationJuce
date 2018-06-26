@@ -105,9 +105,6 @@ public:
     void AddWall(const nMath::Vector start, const nMath::Vector end);
 
     template<bool capture_debug = false>
-    float Simulate(const nMath::Vector& source, const nMath::Vector& receiver, const SoundPropagation::MethodType method) const;
-
-    template<bool capture_debug = false>
     bool Intersects(const nMath::LineSegment& _line) const;
 
     const std::vector<nMath::LineSegment>& Walls() const
@@ -118,35 +115,63 @@ public:
     void SwapCollector(std::unique_ptr<RayCastCollector>& collector);
 
 private:
-    template<bool capture_debug = false>
-    float SimulateSpecularLOS(const nMath::Vector& source, const nMath::Vector& receiver) const;
-
-    template<bool capture_debug = false>
-    float SimulateRayCasts(const nMath::Vector& source, const nMath::Vector& receiver) const;
-
     template<bool capture_debug>
     void CaptureDebug(const nMath::LineSegment& _line) const;
 };
 
-class PlannerWave
+class PropagationPlanner
 {
 public:
-    PlannerWave() 
+    virtual void Preprocess(std::shared_ptr<const RoomGeometry> _room) = 0;
+
+    struct SourceConfig
     {
-        Plan(nMath::Vector{ 0.f,0.f,0.f }, 0.f, 1.f);
-    }
-    void Preprocess(const RoomGeometry& room);
-    void Plan(const nMath::Vector& _source, const float _frequency, const float _time_scale);
-    float Simulate(const RoomGeometry& room, const nMath::Vector& receiver, const float time_ms) const;
+        const nMath::Vector source;
+        const float frequency;
+        const float time_scale;
+    };    
+    virtual void Plan(const SourceConfig& _config) = 0;
+    virtual float Simulate(const nMath::Vector& _receiver, const float _time_ms) const = 0;
+};
+
+class PlannerSpecularLOS : PropagationPlanner
+{
+    PlannerSpecularLOS() {}
+    void Preprocess(std::shared_ptr<const RoomGeometry> _room) override;
+    void Plan(const PropagationPlanner::SourceConfig& _config) override;
+    float Simulate(const nMath::Vector& _receiver, const float _time_ms) const override;
+private:
+    nMath::Vector source;
+    std::shared_ptr<const RoomGeometry> room;
+};
+
+class PlannerRayCasts : PropagationPlanner
+{
+    PlannerRayCasts() {}
+    void Preprocess(std::shared_ptr<const RoomGeometry> _room) override;
+    void Plan(const PropagationPlanner::SourceConfig& _config) override;
+    float Simulate(const nMath::Vector& _receiver, const float _time_ms) const override;
+private:
+    nMath::Vector source;
+    std::shared_ptr<const RoomGeometry> room;
+};
+
+class PlannerWave : PropagationPlanner
+{
+public:
+    PlannerWave() {}
+    void Preprocess(std::shared_ptr<const RoomGeometry> _room) override;
+    void Plan(const PropagationPlanner::SourceConfig& _config) override;
+    float Simulate(const nMath::Vector& _receiver, const float _time_ms) const override;
 private:
     std::vector<nMath::Vector> first_reflections;
-    std::vector<nMath::LineSegment> walls;
     nMath::Vector source;
+    std::shared_ptr<const RoomGeometry> room;
     float frequency;
     float time_factor;
 };
 
-class PlannerAStar
+class PlannerAStar : PropagationPlanner
 {
 private:
     const static uint32_t GridDistance = 60; // meters    
@@ -176,9 +201,9 @@ private:
 
 public:
     PlannerAStar();
-    void Preprocess(const RoomGeometry& room);
-    void Plan(const nMath::Vector& source);
-    float Simulate(const nMath::Vector& receiver) const;
+    void Preprocess(std::shared_ptr<const RoomGeometry> _room) override;
+    void Plan(const PropagationPlanner::SourceConfig& _config) override;
+    float Simulate(const nMath::Vector& _receiver, const float _time_ms) const override;
 
     const std::unique_ptr<GeometryGrid>& Grid() const
     {
@@ -187,10 +212,8 @@ public:
 private:
     float FindAStarDiscrete(const Coord& receiver_coord);
 
+    std::shared_ptr<const RoomGeometry> room;
     std::unique_ptr<GeometryGrid> grid;
     std::unique_ptr<GeometryGridCache> grid_cache;
     Coord source_coord;
 };
-
-template float RoomGeometry::Simulate<false>(const nMath::Vector& source, const nMath::Vector& receiver, const SoundPropagation::MethodType method) const;
-template float RoomGeometry::Simulate<true>(const nMath::Vector& source, const nMath::Vector& receiver, const SoundPropagation::MethodType method) const;

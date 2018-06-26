@@ -13,6 +13,7 @@
 class MovingEmitter;
 class RoomGeometry;
 class RayCastCollector;
+class PropagationPlanner;
 class PlannerAStar;
 class PlannerWave;
 namespace nDSP
@@ -37,6 +38,12 @@ struct SoundBuffer
     char name[256];
     std::shared_ptr<AudioSampleBuffer> buffer;
     int32 index;
+};
+
+struct PropagationSource
+{
+    SoundBuffer test_buffers;
+    std::unique_ptr<PropagationPlanner> planner;
 };
 
 //==============================================================================
@@ -106,6 +113,8 @@ private:
     std::array<SoundBuffer, 3> test_buffers;
     std::atomic_int32_t selected_test_buffer;
     uint32 start_time;
+
+    std::array<PropagationSource, 3> sources;
 
     float sample_rate;
 

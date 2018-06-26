@@ -760,7 +760,7 @@ void MainComponent::update()
         const nMath::Vector center{ min_extent / 2.f, min_extent / 2.f, 0.f };
         const float inv_zoom_factor = 1.f/10.f;
         const nMath::Vector receiever_pos = { (receiver_x - center.x) * inv_zoom_factor , (receiver_y - center.y) * -inv_zoom_factor, 0.f};
-        const float simulated_gain = room->Simulate<true>(emitter_pos, receiever_pos, simulation_method);
+        const float simulated_gain = 0.f; // room->Simulate<true>(emitter_pos, receiever_pos, simulation_method);
         moving_emitter->ComputeGain(simulated_gain);
         if (ray_casts)
         {
@@ -803,21 +803,27 @@ void MainComponent::update()
                                            simulation_method == SoundPropagation::MethodType::Method_Wave;
                 if (using_planner)
                 {
+                    const PropagationPlanner::SourceConfig planner_config = {
+                        emitter_pos,
+                        test_frequency.load(),
+                        time_scale.load()
+                    };
+
                     if (simulation_method == SoundPropagation::MethodType::Method_Pathfinding)
                     {
                         if (perform_refresh)
                         {
-                            planner_astar->Preprocess(*room);
+                            planner_astar->Preprocess(room);
                         }
-                        planner_astar->Plan(emitter_pos);
+                        planner_astar->Plan(planner_config);
                     }
                     else
                     {
                         if (perform_refresh)
                         {
-                            planner_wave->Preprocess(*room);
+                            planner_wave->Preprocess(room);
                         }
-                        planner_wave->Plan(emitter_pos, test_frequency.load(), time_scale.load());
+                        planner_wave->Plan(planner_config);
                     }
                 }
                 uint8* pixel = bitmap.getPixelPointer(0, 0);
@@ -841,14 +847,14 @@ void MainComponent::update()
                                                             0.f };
                         float energy = using_planner ?
                             (simulation_method == SoundPropagation::MethodType::Method_Pathfinding ?
-                             planner_astar->Simulate(pixel_to_world) 
-                                : planner_wave->Simulate(*room, pixel_to_world, time_now)) 
-                             : room->Simulate(emitter_pos, pixel_to_world, simulation_method);
-                        if (simulation_compare_to != SoundPropagation::Method_Off)
-                        {
-                            float compare_to_energy = room->Simulate(emitter_pos, pixel_to_world, simulation_compare_to);
-                            energy = fabs(energy - compare_to_energy);                            
-                        }
+                                planner_astar->Simulate(pixel_to_world, time_now)
+                                : planner_wave->Simulate(pixel_to_world, time_now))
+                            : 0.f;
+                        //if (simulation_compare_to != SoundPropagation::Method_Off)
+                        //{
+                        //    float compare_to_energy = room->Simulate(emitter_pos, pixel_to_world, simulation_compare_to);
+                        //    energy = fabs(energy - compare_to_energy);                            
+                        //}
                         int contour_color = -1;
 
                         if (overlay_contours)

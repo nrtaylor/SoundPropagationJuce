@@ -134,9 +134,8 @@ public:
     virtual float Simulate(const nMath::Vector& _receiver, const float _time_ms) const = 0;
 };
 
-class PlannerSpecularLOS : PropagationPlanner
+class PlannerSpecularLOS : public PropagationPlanner
 {
-    PlannerSpecularLOS() {}
     void Preprocess(std::shared_ptr<const RoomGeometry> _room) override;
     void Plan(const PropagationPlanner::SourceConfig& _config) override;
     float Simulate(const nMath::Vector& _receiver, const float _time_ms) const override;
@@ -145,9 +144,8 @@ private:
     std::shared_ptr<const RoomGeometry> room;
 };
 
-class PlannerRayCasts : PropagationPlanner
+class PlannerRayCasts : public PropagationPlanner
 {
-    PlannerRayCasts() {}
     void Preprocess(std::shared_ptr<const RoomGeometry> _room) override;
     void Plan(const PropagationPlanner::SourceConfig& _config) override;
     float Simulate(const nMath::Vector& _receiver, const float _time_ms) const override;
@@ -156,10 +154,9 @@ private:
     std::shared_ptr<const RoomGeometry> room;
 };
 
-class PlannerWave : PropagationPlanner
+class PlannerWave : public PropagationPlanner
 {
 public:
-    PlannerWave() {}
     void Preprocess(std::shared_ptr<const RoomGeometry> _room) override;
     void Plan(const PropagationPlanner::SourceConfig& _config) override;
     float Simulate(const nMath::Vector& _receiver, const float _time_ms) const override;
@@ -171,7 +168,7 @@ private:
     float time_factor;
 };
 
-class PlannerAStar : PropagationPlanner
+class PlannerAStar : public PropagationPlanner
 {
 private:
     const static uint32_t GridDistance = 60; // meters    

@@ -76,18 +76,35 @@ MainComponent::MainComponent() :
     setAudioChannels(0, 2);
     setWantsKeyboardFocus(true);
 
+    selected_source = 0;
+
     button_source[0].setButtonText("Source 1");
     button_source[0].setToggleState(true, dontSendNotification);
-    button_source[0].onClick = [this]() { label_selected_sound.setText("Source 1", dontSendNotification); };
+    button_source[0].onClick = [this]() 
+    { 
+        selected_source = 0;
+        label_selected_sound.setText("Source 1", dontSendNotification); 
+    };
     button_source[1].setButtonText("Source 2");
-    button_source[1].onClick = [this]() { label_selected_sound.setText("Source 2", dontSendNotification); };
+    button_source[1].onClick = [this]() 
+    { 
+        selected_source = 1;
+        label_selected_sound.setText("Source 2", dontSendNotification); 
+    };
     button_source[2].setButtonText("Source 3");
-    button_source[2].onClick = [this]() { label_selected_sound.setText("Source 3", dontSendNotification); };
+    button_source[2].onClick = [this]() 
+    { 
+        selected_source = 2;
+        label_selected_sound.setText("Source 3", dontSendNotification); 
+    };
     for (int i = 0; i < 3; ++i)
     {
         button_source[i].setRadioGroupId(1001);
         button_source[i].setClickingTogglesState(true);
         addAndMakeVisible(button_source[i]);
+
+        sources[i].planner.reset(new PlannerSpecularLOS());
+        sources[i].source_type = PropagationSource::SOURCE_OFF;
     }
 
     button_loadfile.setButtonText("...");
@@ -97,7 +114,7 @@ MainComponent::MainComponent() :
         {
             AudioFormatManager format_manager; format_manager.registerBasicFormats();
             const File& file = chooser.getResult();
-            SoundBufferHelper::LoadFromFile(test_buffers[0], format_manager, file);
+            SoundBufferHelper::LoadFromFile(sources[selected_source].test_buffer, format_manager, file);
             label_loadfile.setText(file.getFileName(), dontSendNotification);
         }
     };
@@ -392,13 +409,13 @@ MainComponent::~MainComponent()
 //==============================================================================
 void MainComponent::initialise()
 {    
-    combo_selected_sound.addItem("File", SOURCE_FILE);
-    combo_selected_sound.addItem("Frequency", SOURCE_FREQUENCY);
-    combo_selected_sound.addItem("Off", SOURCE_OFF);
+    combo_selected_sound.addItem("File", PropagationSource::SOURCE_FILE);
+    combo_selected_sound.addItem("Frequency", PropagationSource::SOURCE_FREQUENCY);
+    combo_selected_sound.addItem("Off", PropagationSource::SOURCE_OFF);
 
     {
         MessageManagerLock lock;
-        combo_selected_sound.setSelectedId(SOURCE_OFF);
+        combo_selected_sound.setSelectedId(PropagationSource::SOURCE_OFF);
         combo_selected_sound.addListener(this);
 
         addAndMakeVisible(&label_selected_sound);
@@ -659,17 +676,15 @@ void MainComponent::getNextAudioBlock(const AudioSourceChannelInfo& bufferToFill
     {
         return;
     }
-    const uint32 selected_buffer_id = selected_test_buffer.load();
-    if (selected_buffer_id < 0 ||
-        selected_buffer_id >= test_buffers.size())
+
+    const int32 source_id = selected_source.load();
+    PropagationSource& source = sources[source_id];
+    if (source.source_type != PropagationSource::SOURCE_FILE)
     {
         return;
     }
-    const int channels = bufferToFill.buffer->getNumChannels();
 
-    int samples_remaining = bufferToFill.numSamples;
-    int sample_offset = bufferToFill.startSample;
-    SoundBuffer& buffer_info = test_buffers[selected_buffer_id];
+    SoundBuffer& buffer_info = source.test_buffer;
     std::shared_ptr<AudioSampleBuffer> buffer = buffer_info.buffer;
     if (buffer == nullptr ||
         buffer->getNumChannels() <= 0)
@@ -682,6 +697,9 @@ void MainComponent::getNextAudioBlock(const AudioSourceChannelInfo& bufferToFill
     }
     int& buffer_index = buffer_info.index;
 
+    const int channels = bufferToFill.buffer->getNumChannels();
+    int samples_remaining = bufferToFill.numSamples;
+    int sample_offset = bufferToFill.startSample;
     const float gain_left = moving_emitter->Gain(0);
     const float gain_right = moving_emitter->Gain(1);    
 
@@ -745,8 +763,10 @@ void MainComponent::update()
         emitter_pos = moving_emitter->Update(0);
 #endif
     }    
+    std::shared_ptr<PropagationPlanner> planner = sources[selected_source].planner;
     std::shared_ptr<RoomGeometry> room = current_room; // this isn't guarunteed atomic
     const SoundPropagation::MethodType simulation_method = current_method.load();
+    const float time_now = (float)(Time::currentTimeMillis() % ((1 + (int)test_frequency) * 1000));// TODO: start at t = 0 or store in planner.
     if (room != nullptr)
     {
         const bool ray_casts = show_ray_casts;
@@ -760,7 +780,24 @@ void MainComponent::update()
         const nMath::Vector center{ min_extent / 2.f, min_extent / 2.f, 0.f };
         const float inv_zoom_factor = 1.f/10.f;
         const nMath::Vector receiever_pos = { (receiver_x - center.x) * inv_zoom_factor , (receiver_y - center.y) * -inv_zoom_factor, 0.f};
-        const float simulated_gain = 0.f; // room->Simulate<true>(emitter_pos, receiever_pos, simulation_method);
+                        
+        const PropagationPlanner::SourceConfig planner_config = {
+            emitter_pos,
+            test_frequency.load(),
+            time_scale.load()
+        };
+        bool perform_refresh = planners_refresh.load();
+        planners_refresh = false;
+        if (perform_refresh)
+        {
+            planner->Preprocess(room);
+        }
+        if (!flag_update_working)
+        {
+            planner->Plan(planner_config);
+        }
+
+        const float simulated_gain = planner->Simulate(receiever_pos, 0.f);
         moving_emitter->ComputeGain(simulated_gain);
         if (ray_casts)
         {
@@ -778,15 +815,11 @@ void MainComponent::update()
             {
                 std::lock_guard<std::mutex> guard(mutex_image);
                 image_next = ImageHelper::SquareImage(getBounds());
-            }
-
-            const float time_now = (float)(Time::currentTimeMillis() % ((1 + (int)test_frequency) * 1000));// TODO: start at t = 0 or store in planner.
+            }            
 
             bool overlay_contours = show_contours.load();
-            bool perform_refresh = planners_refresh.load();
-            planners_refresh = false;
 
-            std::thread worker = std::thread([this, simulation_method, emitter_pos, overlay_contours, perform_refresh, time_now] {
+            std::thread worker = std::thread([this, simulation_method, emitter_pos, overlay_contours, planner, time_now] {
                 std::lock_guard<std::mutex> guard(mutex_image);
                 std::shared_ptr<RoomGeometry> room = current_room;
                 const SoundPropagation::MethodType simulation_compare_to = current_compare_to_method.load();
@@ -799,33 +832,6 @@ void MainComponent::update()
 #ifdef PROFILE_SIMULATION
                 Thread::sleep(5000);
 #endif
-                const bool using_planner = simulation_method == SoundPropagation::MethodType::Method_Pathfinding ||
-                                           simulation_method == SoundPropagation::MethodType::Method_Wave;
-                if (using_planner)
-                {
-                    const PropagationPlanner::SourceConfig planner_config = {
-                        emitter_pos,
-                        test_frequency.load(),
-                        time_scale.load()
-                    };
-
-                    if (simulation_method == SoundPropagation::MethodType::Method_Pathfinding)
-                    {
-                        if (perform_refresh)
-                        {
-                            planner_astar->Preprocess(room);
-                        }
-                        planner_astar->Plan(planner_config);
-                    }
-                    else
-                    {
-                        if (perform_refresh)
-                        {
-                            planner_wave->Preprocess(room);
-                        }
-                        planner_wave->Plan(planner_config);
-                    }
-                }
                 uint8* pixel = bitmap.getPixelPointer(0, 0);
 
                 // for contours
@@ -845,11 +851,7 @@ void MainComponent::update()
                         const nMath::Vector pixel_to_world = { (j - center.x) * inv_zoom_factor,
                                                            (i - center.y) * -inv_zoom_factor,
                                                             0.f };
-                        float energy = using_planner ?
-                            (simulation_method == SoundPropagation::MethodType::Method_Pathfinding ?
-                                planner_astar->Simulate(pixel_to_world, time_now)
-                                : planner_wave->Simulate(pixel_to_world, time_now))
-                            : 0.f;
+                        float energy = planner->Simulate(pixel_to_world, time_now);
                         //if (simulation_compare_to != SoundPropagation::Method_Off)
                         //{
                         //    float compare_to_energy = room->Simulate(emitter_pos, pixel_to_world, simulation_compare_to);
@@ -969,34 +971,51 @@ void MainComponent::comboBoxChanged(ComboBox* comboBoxThatHasChanged)
         const int32 next_id = combo_selected_sound.getSelectedId();
         if (next_id > 0)
         {
-            if (next_id == SOURCE_FILE)
-            {
-                selected_test_buffer = 0;
+            const int32 source_id = selected_source.load();
+            sources[source_id].source_type = (PropagationSource::SourceType)next_id;
+            if (next_id == PropagationSource::SOURCE_FILE)
+            {                
                 button_loadfile.setVisible(true);
                 label_loadfile.setVisible(true);
                 slider_spl_freq.setVisible(false);
             }
             else
             {
-                selected_test_buffer = -1;
                 button_loadfile.setVisible(false);
                 label_loadfile.setVisible(false);
                 slider_spl_freq.setVisible(true);
             }
         }
     }
-    else if (comboBoxThatHasChanged == &combo_room)
+    else if (comboBoxThatHasChanged == &combo_room ||
+             comboBoxThatHasChanged == &combo_method)
     {
         const uint32 next_id = combo_room.getSelectedId();
         if (next_id > 0)
         {
-            current_room = rooms[next_id - 1];
-            planners_refresh = true;
+            current_room = rooms[next_id - 1];    
         }
-    }
-    else if (comboBoxThatHasChanged == &combo_method)
-    {
+
         current_method = static_cast<SoundPropagation::MethodType>(combo_method.getSelectedId());
+        std::shared_ptr<PropagationPlanner> next_planner = nullptr;
+        switch (current_method)
+        {
+            case SoundPropagation::Method_SpecularLOS:
+                next_planner = std::make_shared<PlannerSpecularLOS>();
+                break;
+            case SoundPropagation::Method_RayCasts:
+                next_planner = std::make_shared<PlannerRayCasts>();
+                break;
+            case SoundPropagation::Method_Pathfinding:
+                next_planner = std::make_shared<PlannerAStar>();
+                break;
+            case SoundPropagation::Method_Wave:
+                next_planner = std::make_shared<PlannerWave>();
+                break;
+        default:
+            break;
+        }
+        sources[selected_source].planner.swap(next_planner);
         planners_refresh = true;
     }
     else if (comboBoxThatHasChanged == &combo_compare_to_method)

@@ -42,8 +42,15 @@ struct SoundBuffer
 
 struct PropagationSource
 {
-    SoundBuffer test_buffers;
-    std::unique_ptr<PropagationPlanner> planner;
+    enum SourceType : int32
+    {
+        SOURCE_OFF = 1,
+        SOURCE_FILE,
+        SOURCE_FREQUENCY
+    };
+    SoundBuffer test_buffer;
+    std::shared_ptr<PropagationPlanner> planner;
+    std::atomic<SourceType> source_type;
 };
 
 //==============================================================================
@@ -115,6 +122,7 @@ private:
     uint32 start_time;
 
     std::array<PropagationSource, 3> sources;
+    std::atomic_int32_t selected_source;
 
     float sample_rate;
 
@@ -179,13 +187,6 @@ private:
 
     ComboBox combo_selected_sound;
     Label label_selected_sound;
-
-    enum SourceType : int32
-    {
-        SOURCE_OFF = 1,
-        SOURCE_FILE,
-        SOURCE_FREQUENCY
-    };
 
     void timerCallback() override;
 

@@ -54,7 +54,6 @@ namespace SoundBufferHelper
 //==============================================================================
 MainComponent::MainComponent() :
     initialized(false),
-    selected_test_buffer(0),
     sample_rate(0.f),
     image_spl()
 {
@@ -253,8 +252,6 @@ MainComponent::MainComponent() :
     addAndMakeVisible(&combo_room);    
     combo_room.addListener(this);
 
-    planner_astar = std::make_unique<PlannerAStar>();
-    planner_wave = std::make_unique<PlannerWave>();
     planners_refresh = true;
 
     addAndMakeVisible(&label_selected_room);
@@ -429,7 +426,16 @@ void MainComponent::initialise()
 
 void MainComponent::shutdown()
 {
-    // Free any GL objects created for rendering here.
+    bool is_working = true;
+    if (flag_update_working.compare_exchange_strong(is_working, false))
+    {
+        int32 counter = 1000;
+        while (!flag_refresh_image.load() &&
+                counter-- > 0)
+        {
+            Thread::sleep(1);
+        }
+    }
 }
 
 void MainComponent::render()
@@ -841,6 +847,12 @@ void MainComponent::update()
                             break;
                         }
 #endif
+                        if (!flag_update_working)
+                        {
+                            flag_refresh_image.store(true);
+                            return; // task cancelled
+                        }
+
                         const nMath::Vector pixel_to_world = { (j - center.x) * inv_zoom_factor,
                                                            (i - center.y) * -inv_zoom_factor,
                                                             0.f };

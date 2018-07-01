@@ -112,13 +112,8 @@ private:
     std::unique_ptr<RayCastCollector> ray_cast_collector;
     std::unique_ptr<std::mutex> mutex_ray_cast_collector;
 
-    std::unique_ptr<PlannerAStar> planner_astar;
     std::atomic<bool> planners_refresh;
-
-    std::unique_ptr<PlannerWave> planner_wave;
     
-    std::array<SoundBuffer, 3> test_buffers;
-    std::atomic_int32_t selected_test_buffer;
     uint32 start_time;
 
     std::array<PropagationSource, 3> sources;

@@ -535,6 +535,30 @@ float PlannerAStar::Simulate(const nMath::Vector& _receiver, const float _time_m
     return sum;
 }
 
+std::shared_ptr<PropagationPlanner> PropagationPlanner::MakePlanner(const SoundPropagation::MethodType method)
+{
+    std::shared_ptr<PropagationPlanner> planner = nullptr;
+    switch (method)
+    {
+    case SoundPropagation::Method_SpecularLOS:
+        planner = std::make_shared<PlannerSpecularLOS>();
+        break;
+    case SoundPropagation::Method_RayCasts:
+        planner = std::make_shared<PlannerRayCasts>();
+        break;
+    case SoundPropagation::Method_Pathfinding:
+        planner = std::make_shared<PlannerAStar>();
+        break;
+    case SoundPropagation::Method_Wave:
+        planner = std::make_shared<PlannerWave>();
+        break;
+    default:
+        break;
+    }
+
+    return planner;
+}
+
 void PlannerSpecularLOS::Preprocess(std::shared_ptr<const RoomGeometry> _room)
 {
     room = _room;

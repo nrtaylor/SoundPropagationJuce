@@ -786,16 +786,9 @@ void MainComponent::update()
             test_frequency.load(),
             time_scale.load()
         };
-        bool perform_refresh = planners_refresh.load();
-        planners_refresh = false;
-        if (perform_refresh)
-        {
-            planner->Preprocess(room);
-        }
-        if (!flag_update_working)
-        {
-            planner->Plan(planner_config);
-        }
+        planner = PropagationPlanner::MakePlanner(current_method);
+        planner->Preprocess(room);
+        planner->Plan(planner_config);
 
         const float simulated_gain = planner->Simulate(receiever_pos, 0.f);
         moving_emitter->ComputeGain(simulated_gain);
@@ -995,27 +988,8 @@ void MainComponent::comboBoxChanged(ComboBox* comboBoxThatHasChanged)
         {
             current_room = rooms[next_id - 1];    
         }
-
-        current_method = static_cast<SoundPropagation::MethodType>(combo_method.getSelectedId());
-        std::shared_ptr<PropagationPlanner> next_planner = nullptr;
-        switch (current_method)
-        {
-            case SoundPropagation::Method_SpecularLOS:
-                next_planner = std::make_shared<PlannerSpecularLOS>();
-                break;
-            case SoundPropagation::Method_RayCasts:
-                next_planner = std::make_shared<PlannerRayCasts>();
-                break;
-            case SoundPropagation::Method_Pathfinding:
-                next_planner = std::make_shared<PlannerAStar>();
-                break;
-            case SoundPropagation::Method_Wave:
-                next_planner = std::make_shared<PlannerWave>();
-                break;
-        default:
-            break;
-        }
-        sources[selected_source].planner.swap(next_planner);
+        current_method = static_cast<SoundPropagation::MethodType>(combo_method.getSelectedId());        
+        sources[selected_source].planner = PropagationPlanner::MakePlanner(current_method);
         planners_refresh = true;
     }
     else if (comboBoxThatHasChanged == &combo_compare_to_method)

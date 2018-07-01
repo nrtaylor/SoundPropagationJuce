@@ -122,6 +122,7 @@ private:
 class PropagationPlanner
 {
 public:
+    static std::shared_ptr<PropagationPlanner> MakePlanner(const SoundPropagation::MethodType method);
     virtual void Preprocess(std::shared_ptr<const RoomGeometry> _room) = 0;
 
     struct SourceConfig

@@ -10,6 +10,7 @@
 #include <math.h>
 #include "nSignalProcessing.h"
 #include "RoomGeometry.h"
+#include "PropagationPlanner.h"
 
 //#define PROFILE_SIMULATION
 

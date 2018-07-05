@@ -23,6 +23,11 @@ namespace SoundPropagation
 
 class RoomGeometry;
 
+struct PropagationResult
+{
+    float gain; // TODO: find better term. Perhaps dampening?
+};
+
 class PropagationPlanner
 {
 public:
@@ -36,14 +41,14 @@ public:
         const float time_scale;
     };
     virtual void Plan(const SourceConfig& _config) = 0;
-    virtual float Simulate(const nMath::Vector& _receiver, const float _time_ms) const = 0;
+    virtual void Simulate(PropagationResult& result, const nMath::Vector& _receiver, const float _time_ms) const = 0;
 };
 
 class PlannerSpecularLOS : public PropagationPlanner
 {
     void Preprocess(std::shared_ptr<const RoomGeometry> _room) override;
     void Plan(const PropagationPlanner::SourceConfig& _config) override;
-    float Simulate(const nMath::Vector& _receiver, const float _time_ms) const override;
+    void Simulate(PropagationResult& result, const nMath::Vector& _receiver, const float _time_ms) const override;
 private:
     nMath::Vector source;
     std::shared_ptr<const RoomGeometry> room;
@@ -53,7 +58,7 @@ class PlannerRayCasts : public PropagationPlanner
 {
     void Preprocess(std::shared_ptr<const RoomGeometry> _room) override;
     void Plan(const PropagationPlanner::SourceConfig& _config) override;
-    float Simulate(const nMath::Vector& _receiver, const float _time_ms) const override;
+    void Simulate(PropagationResult& result, const nMath::Vector& _receiver, const float _time_ms) const override;
 private:
     nMath::Vector source;
     std::shared_ptr<const RoomGeometry> room;
@@ -64,7 +69,7 @@ class PlannerWave : public PropagationPlanner
 public:
     void Preprocess(std::shared_ptr<const RoomGeometry> _room) override;
     void Plan(const PropagationPlanner::SourceConfig& _config) override;
-    float Simulate(const nMath::Vector& _receiver, const float _time_ms) const override;
+    void Simulate(PropagationResult& result, const nMath::Vector& _receiver, const float _time_ms) const override;
 private:
     std::vector<nMath::Vector> first_reflections;
     nMath::Vector source;
@@ -105,7 +110,7 @@ public:
     PlannerAStar();
     void Preprocess(std::shared_ptr<const RoomGeometry> _room) override;
     void Plan(const PropagationPlanner::SourceConfig& _config) override;
-    float Simulate(const nMath::Vector& _receiver, const float _time_ms) const override;
+    void Simulate(PropagationResult& result, const nMath::Vector& _receiver, const float _time_ms) const override;
 
     const std::unique_ptr<GeometryGrid>& Grid() const
     {

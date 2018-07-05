@@ -325,7 +325,7 @@ float PlannerAStar::FindAStarDiscrete(const Coord& receiver_coord)
     return geometric_attenuation;
 }
 
-float PlannerAStar::Simulate(const nMath::Vector& _receiver, const float _time_ms) const
+void PlannerAStar::Simulate(PropagationResult& result, const nMath::Vector& _receiver, const float _time_ms) const
 {
     (void)_time_ms;
 
@@ -335,7 +335,8 @@ float PlannerAStar::Simulate(const nMath::Vector& _receiver, const float _time_m
     if (grid_receiver.x < 0 || grid_receiver.y < 0 ||
         grid_receiver.x >= GridResolution || grid_receiver.y >= GridResolution)
     {
-        return 0.f;
+        result.gain = 0.f;
+        return;
     };
 
     const Coord receiver_coord = Coord{ (int)grid_receiver.y, (int)grid_receiver.x };
@@ -399,7 +400,7 @@ float PlannerAStar::Simulate(const nMath::Vector& _receiver, const float _time_m
         }
     }
 
-    return sum;
+    result.gain = sum;
 }
 
 std::shared_ptr<PropagationPlanner> PropagationPlanner::MakePlanner(const SoundPropagation::MethodType method)
@@ -436,18 +437,19 @@ void PlannerSpecularLOS::Plan(const PropagationPlanner::SourceConfig& _config)
     source = _config.source;
 }
 
-float PlannerSpecularLOS::Simulate(const nMath::Vector& _receiver, const float _time_ms) const
+void PlannerSpecularLOS::Simulate(PropagationResult& result, const nMath::Vector& _receiver, const float _time_ms) const
 {
     (void)_time_ms;
 
     if (room->Intersects(nMath::LineSegment{ source, _receiver }))
     {
-        return 0.f;
+        result.gain = 0.f;
+        return;
     }
 
     const float distance = nMath::Max(FLT_EPSILON, nMath::Length(source - _receiver));
     const float geometric_attenuation = nMath::Min(1.f, 1.f / distance);
-    return geometric_attenuation;
+    result.gain = geometric_attenuation;
 }
 
 void PlannerRayCasts::Plan(const PropagationPlanner::SourceConfig& _config)
@@ -460,7 +462,7 @@ void PlannerRayCasts::Preprocess(std::shared_ptr<const RoomGeometry> _room)
     room = _room;
 }
 
-float PlannerRayCasts::Simulate(const nMath::Vector& _receiver, const float _time_ms) const
+void PlannerRayCasts::Simulate(PropagationResult& result, const nMath::Vector& _receiver, const float _time_ms) const
 {
     (void)_time_ms;
 
@@ -489,17 +491,19 @@ float PlannerRayCasts::Simulate(const nMath::Vector& _receiver, const float _tim
             }
             else
             {
-                return 0.f;
+                result.gain = 0.f;
+                return;
             }
         }
         else
         {
-            return 0.f;
+            result.gain = 0.f;
+            return;
         }
     }
 
     const float geometric_attenuation = nMath::Min(1.f, 1.f / nMath::Max(FLT_EPSILON, distance));
-    return geometric_attenuation;
+    result.gain = geometric_attenuation;
 }
 
 void PlannerWave::Plan(const PropagationPlanner::SourceConfig& _config)
@@ -523,11 +527,12 @@ void PlannerWave::Preprocess(std::shared_ptr<const RoomGeometry> _room)
     room = _room;
 }
 
-float PlannerWave::Simulate(const nMath::Vector& _receiver, const float _time_ms) const
+void PlannerWave::Simulate(PropagationResult& result, const nMath::Vector& _receiver, const float _time_ms) const
 {
     if (room->Intersects(nMath::LineSegment{ source, _receiver }))
     {
-        return 0.f;
+        result.gain = 0.f;
+        return;
     }
 
     const float distance = nMath::Length(_receiver - source);
@@ -546,5 +551,5 @@ float PlannerWave::Simulate(const nMath::Vector& _receiver, const float _time_ms
     }
 
     const float gain = 0.9f;
-    return value * gain;
+    result.gain = value * gain;
 }

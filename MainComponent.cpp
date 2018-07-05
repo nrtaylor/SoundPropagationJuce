@@ -42,6 +42,7 @@ namespace SoundBufferHelper
                 true);
             buffer.buffer = samples;
             buffer.index = 0;
+            buffer.name = file.getFileName();
         }
     }
 
@@ -114,8 +115,9 @@ MainComponent::MainComponent() :
         {
             AudioFormatManager format_manager; format_manager.registerBasicFormats();
             const File& file = chooser.getResult();
-            SoundBufferHelper::LoadFromFile(sources[selected_source].test_buffer, format_manager, file);
-            label_loadfile.setText(file.getFileName(), dontSendNotification);
+            SoundBuffer& buffer_state = sources[selected_source].test_buffer;
+            SoundBufferHelper::LoadFromFile(buffer_state, format_manager, file);
+            label_loadfile.setText(buffer_state.name, dontSendNotification);
         }
     };
     addChildComponent(button_loadfile);
@@ -248,6 +250,7 @@ MainComponent::MainComponent() :
     atmospheric_filters[1] = std::make_unique<nDSP::Butterworth1Pole>();
     atmospheric_filters[1]->bypass = true;
     moving_emitter = std::make_unique<MovingEmitter>();
+    simulation_result = std::make_unique<PropagationResult>();
 
     current_room = nullptr;
     addAndMakeVisible(&combo_room);    
@@ -796,8 +799,9 @@ void MainComponent::update()
         planner = PropagationPlanner::MakePlanner(current_method);
         planner->Preprocess(room);
         planner->Plan(planner_config);
+        planner->Simulate(*simulation_result.get(), receiever_pos, 0.f);
 
-        const float simulated_gain = planner->Simulate(receiever_pos, 0.f);
+        const float simulated_gain = simulation_result->gain;
         moving_emitter->ComputeGain(simulated_gain);
         if (ray_casts)
         {
@@ -837,6 +841,8 @@ void MainComponent::update()
                 // for contours
                 std::vector<float> previous_row; previous_row.resize(extent);
                 std::fill(previous_row.begin(), previous_row.end(), FLT_MAX);
+
+                PropagationResult result;
                 
                 for (int i = 0; i < extent; ++i)
                 {
@@ -857,7 +863,8 @@ void MainComponent::update()
                         const nMath::Vector pixel_to_world = { (j - center.x) * inv_zoom_factor,
                                                            (i - center.y) * -inv_zoom_factor,
                                                             0.f };
-                        float energy = planner->Simulate(pixel_to_world, time_now);
+                        planner->Simulate(result, pixel_to_world, time_now);
+                        float energy = result.gain;
                         //if (simulation_compare_to != SoundPropagation::Method_Off)
                         //{
                         //    float compare_to_energy = room->Simulate(emitter_pos, pixel_to_world, simulation_compare_to);

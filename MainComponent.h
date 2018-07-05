@@ -13,6 +13,7 @@
 class MovingEmitter;
 class RoomGeometry;
 class RayCastCollector;
+struct PropagationResult;
 class PropagationPlanner;
 class PlannerAStar;
 class PlannerWave;
@@ -30,12 +31,11 @@ struct SoundBuffer
 {
     SoundBuffer() :
         index(0),
-        buffer(nullptr)
-    {
-        name[0] = (char)0;
-    }
+        buffer(nullptr),
+        name("")
+    {}
 
-    char name[256];
+    String name;
     std::shared_ptr<AudioSampleBuffer> buffer;
     int32 index;
 };
@@ -112,6 +112,7 @@ private:
     std::unique_ptr<RayCastCollector> ray_cast_collector;
     std::unique_ptr<std::mutex> mutex_ray_cast_collector;
 
+    std::unique_ptr<PropagationResult> simulation_result;
     std::atomic<bool> planners_refresh;
     
     uint32 start_time;

@@ -53,6 +53,20 @@ struct PropagationSource
     std::atomic<SourceType> source_type;
 };
 
+enum ReadWriteControl : uint32
+{
+    RW_NONE = 0x0,
+    RW_WRITING = 0x01,
+    RW_READING = 0x02,
+};
+
+template<class T>
+struct ReadWriteObject
+{
+    std::atomic<ReadWriteControl> lock;
+    T object;
+};
+
 //==============================================================================
 /*
     This component lives inside our window, and this is where you should put all
@@ -112,7 +126,10 @@ private:
     std::unique_ptr<RayCastCollector> ray_cast_collector;
     std::unique_ptr<std::mutex> mutex_ray_cast_collector;
 
-    std::unique_ptr<PropagationResult> simulation_result;
+    //std::unique_ptr<PropagationResult> simulation_result;
+    using ReadWriteResult = ReadWriteObject<std::unique_ptr<PropagationResult> >;
+    std::array<ReadWriteResult, 3> simulation_results;
+    uint32 write_index;
     std::atomic<bool> planners_refresh;
     
     uint32 start_time;

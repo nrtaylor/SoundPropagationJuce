@@ -250,7 +250,12 @@ MainComponent::MainComponent() :
     atmospheric_filters[1] = std::make_unique<nDSP::Butterworth1Pole>();
     atmospheric_filters[1]->bypass = true;
     moving_emitter = std::make_unique<MovingEmitter>();
-    simulation_result = std::make_unique<PropagationResult>();
+    for (int i = 0; i < (int)simulation_results.size(); ++i)
+    {
+        simulation_results[i].lock = RW_NONE;
+        simulation_results[i].object = std::make_unique<PropagationResult>();
+    }
+    write_index = 0;
 
     current_room = nullptr;
     addAndMakeVisible(&combo_room);    
@@ -790,7 +795,7 @@ void MainComponent::update()
         const nMath::Vector center{ min_extent / 2.f, min_extent / 2.f, 0.f };
         const float inv_zoom_factor = 1.f/10.f;
         const nMath::Vector receiever_pos = { (receiver_x - center.x) * inv_zoom_factor , (receiver_y - center.y) * -inv_zoom_factor, 0.f};
-                        
+
         const PropagationPlanner::SourceConfig planner_config = {
             emitter_pos,
             test_frequency.load(),
@@ -799,9 +804,26 @@ void MainComponent::update()
         planner = PropagationPlanner::MakePlanner(current_method);
         planner->Preprocess(room);
         planner->Plan(planner_config);
-        planner->Simulate(*simulation_result.get(), receiever_pos, 0.f);
+                
 
-        const float simulated_gain = simulation_result->gain;
+        uint32 result_buffer_size = (uint32)simulation_results.size();
+        for (uint32 i = 0; i < result_buffer_size; ++i)
+        {
+            ReadWriteControl rw = RW_NONE;
+            if (simulation_results[(write_index + i) % result_buffer_size].lock.compare_exchange_strong(rw, RW_WRITING))
+            {
+                write_index = (write_index + i) % result_buffer_size;
+                break;
+            }
+        }
+        jassert(write_index < result_buffer_size);
+        ReadWriteResult& simulation_result = simulation_results[write_index];
+        planner->Simulate(*simulation_result.object, receiever_pos, 0.f);
+        
+        ++write_index;
+        simulation_result.lock = RW_NONE;
+
+        const float simulated_gain = simulation_result.object->gain;
         moving_emitter->ComputeGain(simulated_gain);
         if (ray_casts)
         {

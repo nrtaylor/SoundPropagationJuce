@@ -256,6 +256,7 @@ MainComponent::MainComponent() :
         simulation_results[i].object = std::make_unique<PropagationResult>();
     }
     write_index = 0;
+    read_index = 1;
 
     current_room = nullptr;
     addAndMakeVisible(&combo_room);    
@@ -495,6 +496,13 @@ void MainComponent::paint (Graphics& _g)
     if (show_ray_casts)
     {
         PaintRayCasts(_g, bounds, zoom_factor);
+    }
+
+    ReadWriteControl rw = RW_NONE;
+    const uint32 current_read_index = read_index;
+    if (simulation_results[current_read_index].lock.compare_exchange_strong(rw, RW_READING))
+    {
+        simulation_results[current_read_index].lock = RW_NONE;
     }
 
     PaintEmitter(_g, bounds, zoom_factor);
@@ -807,12 +815,18 @@ void MainComponent::update()
                 
 
         uint32 result_buffer_size = (uint32)simulation_results.size();
+        const uint32 local_read_index = read_index;
         for (uint32 i = 0; i < result_buffer_size; ++i)
         {
-            ReadWriteControl rw = RW_NONE;
-            if (simulation_results[(write_index + i) % result_buffer_size].lock.compare_exchange_strong(rw, RW_WRITING))
+            const uint32 next_write_index = (write_index + i) % result_buffer_size;
+            if (local_read_index == next_write_index)
             {
-                write_index = (write_index + i) % result_buffer_size;
+                continue;
+            }
+            ReadWriteControl rw = RW_NONE;
+            if (simulation_results[next_write_index].lock.compare_exchange_strong(rw, RW_WRITING))
+            {
+                write_index = next_write_index;
                 break;
             }
         }
@@ -820,8 +834,9 @@ void MainComponent::update()
         ReadWriteResult& simulation_result = simulation_results[write_index];
         planner->Simulate(*simulation_result.object, receiever_pos, 0.f);
         
-        ++write_index;
         simulation_result.lock = RW_NONE;
+        read_index = write_index;
+        ++write_index;        
 
         const float simulated_gain = simulation_result.object->gain;
         moving_emitter->ComputeGain(simulated_gain);

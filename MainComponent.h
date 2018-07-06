@@ -130,6 +130,7 @@ private:
     using ReadWriteResult = ReadWriteObject<std::unique_ptr<PropagationResult> >;
     std::array<ReadWriteResult, 3> simulation_results;
     uint32 write_index;
+    std::atomic_uint32_t read_index;
     std::atomic<bool> planners_refresh;
     
     uint32 start_time;

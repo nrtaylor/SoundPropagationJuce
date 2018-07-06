@@ -15,7 +15,7 @@ Next Stage:
 Known limitations to fix later:
 - The apps screen dimenisions dictates the resolution of the generated image used to display results.
 - Receiver location is fixed at 0,0.
-- Frequency mode does not change audio.
+- Frequency mode does not generate audio.
 - A* mode is inefficient
 
 ![alt text](/Images/SoundPropagationTestBed.png)

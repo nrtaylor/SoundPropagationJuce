@@ -19,13 +19,22 @@ namespace SoundPropagation
 
         Method_Off
     };
+
+    enum ResultConfig
+    {
+        PRD_GAIN,
+        PRD_FULL,
+    };
 }
 
 class RoomGeometry;
 
 struct PropagationResult
 {
+    const SoundPropagation::ResultConfig config;
     float gain; // TODO: find better term. Perhaps dampening?
+
+    std::vector<nMath::LineSegment> intersections;
 };
 
 class PropagationPlanner
@@ -62,6 +71,8 @@ class PlannerRayCasts : public PropagationPlanner
 private:
     nMath::Vector source;
     std::shared_ptr<const RoomGeometry> room;
+
+    bool Intersects(PropagationResult& result, const nMath::Vector& start, const nMath::Vector& end) const;
 };
 
 class PlannerWave : public PropagationPlanner

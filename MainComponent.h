@@ -12,7 +12,6 @@
 
 class MovingEmitter;
 class RoomGeometry;
-class RayCastCollector;
 struct PropagationResult;
 class PropagationPlanner;
 class PlannerAStar;
@@ -123,10 +122,7 @@ private:
     std::array<std::unique_ptr<nDSP::Butterworth1Pole>, 2> atmospheric_filters;
     std::vector<std::shared_ptr<RoomGeometry>> rooms;
     std::shared_ptr<RoomGeometry> current_room;
-    std::unique_ptr<RayCastCollector> ray_cast_collector;
-    std::unique_ptr<std::mutex> mutex_ray_cast_collector;
-
-    //std::unique_ptr<PropagationResult> simulation_result;
+    
     using ReadWriteResult = ReadWriteObject<std::unique_ptr<PropagationResult> >;
     std::array<ReadWriteResult, 3> simulation_results;
     uint32 write_index;
@@ -206,7 +202,6 @@ private:
 
     void PaintEmitter(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const;
     void PaintRoom(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const;
-    void PaintRayCasts(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };

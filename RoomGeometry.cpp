@@ -41,21 +41,6 @@ float MovingEmitter::Gain(const signed int channel) const
     }
 }
 
-void RayCastCollector::Reset()
-{    
-    ray_casts.clear();
-}
-
-void RayCastCollector::Add(const nMath::LineSegment& ray_cast)
-{
-    ray_casts.emplace_back(ray_cast);
-}
-
-auto RayCastCollector::RayCasts() -> RayCastCollector::ConstRefLineSegments const
-{
-    return ray_casts;
-}
-
 RoomGeometry::RoomGeometry() :
         bounding_box{ {},{} }
 {
@@ -89,26 +74,6 @@ void RoomGeometry::AddWall(const nMath::Vector start, const nMath::Vector end)
         {
             bounding_box.end.y = nMath::Max(start.y, end.y);
         }
-    }
-}
-
-void RoomGeometry::SwapCollector(std::unique_ptr<RayCastCollector>& collector)
-{
-    std::swap(ray_cast_collector, collector);
-}
-
-template<>
-void RoomGeometry::CaptureDebug<false>(const nMath::LineSegment& _line) const
-{
-    (void)_line;
-}
-
-template<>
-void RoomGeometry::CaptureDebug<true>(const nMath::LineSegment& _line) const
-{
-    if (ray_cast_collector != nullptr)
-    {
-        ray_cast_collector->Add(_line);
     }
 }
 

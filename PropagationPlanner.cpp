@@ -441,7 +441,14 @@ void PlannerSpecularLOS::Simulate(PropagationResult& result, const nMath::Vector
 {
     (void)_time_ms;
 
-    if (room->Intersects(nMath::LineSegment{ source, _receiver }))
+    const nMath::LineSegment los = nMath::LineSegment{ source, _receiver };
+    if (result.config == SoundPropagation::PRD_FULL)
+    {
+        result.intersections.clear();
+        result.intersections.push_back(los);
+    }
+
+    if (room->Intersects(los))
     {
         result.gain = 0.f;
         return;
@@ -462,30 +469,45 @@ void PlannerRayCasts::Preprocess(std::shared_ptr<const RoomGeometry> _room)
     room = _room;
 }
 
+bool PlannerRayCasts::Intersects(PropagationResult& result, const nMath::Vector& start, const nMath::Vector& end) const
+{
+    const nMath::LineSegment ls{ start, end };
+    if (result.config == SoundPropagation::PRD_FULL)
+    {
+        result.intersections.push_back(ls);
+    }
+
+    return room->Intersects(ls);
+}
+
 void PlannerRayCasts::Simulate(PropagationResult& result, const nMath::Vector& _receiver, const float _time_ms) const
 {
     (void)_time_ms;
 
     nMath::Vector direction = source - _receiver;
     float distance = nMath::Length(direction);
-    if (room->Intersects(nMath::LineSegment{ source, _receiver }))
+    if (result.config == SoundPropagation::PRD_FULL)
+    {
+        result.intersections.clear();
+    }
+    if (Intersects(result, source, _receiver))
     {
         if (distance > FLT_EPSILON)
         {
             direction = direction / distance;
             nMath::Vector ray_orth = { -direction.y, direction.x, 0.f };
             nMath::Vector ray_orth_inv = -1.f * ray_orth;
-            if ((!room->Intersects(nMath::LineSegment{ ray_orth + _receiver, _receiver }) &&
-                !room->Intersects(nMath::LineSegment{ ray_orth + _receiver, source })) ||
-                (!room->Intersects(nMath::LineSegment{ ray_orth_inv + _receiver, _receiver }) &&
-                    !room->Intersects(nMath::LineSegment{ ray_orth_inv + _receiver, source })))
+            if ((!Intersects(result, ray_orth + _receiver, _receiver) &&
+                !Intersects(result, ray_orth + _receiver, source)) ||
+                (!Intersects(result, ray_orth_inv + _receiver, _receiver) &&
+                    !Intersects(result, ray_orth_inv + _receiver, source)))
             {
                 distance += 1.f;
             }
-            else if ((!room->Intersects(nMath::LineSegment{ ray_orth + source, source }) &&
-                !room->Intersects(nMath::LineSegment{ ray_orth + source, _receiver })) ||
-                (!room->Intersects(nMath::LineSegment{ ray_orth_inv + source, source }) &&
-                    !room->Intersects(nMath::LineSegment{ ray_orth_inv + source, _receiver })))
+            else if ((!Intersects(result, ray_orth + source, source) &&
+                !Intersects(result, ray_orth + source, _receiver)) ||
+                (!Intersects(result, ray_orth_inv + source, source) &&
+                    !Intersects(result, ray_orth_inv + source, _receiver)))
             {
                 distance += 1.f;
             }
@@ -529,7 +551,13 @@ void PlannerWave::Preprocess(std::shared_ptr<const RoomGeometry> _room)
 
 void PlannerWave::Simulate(PropagationResult& result, const nMath::Vector& _receiver, const float _time_ms) const
 {
-    if (room->Intersects(nMath::LineSegment{ source, _receiver }))
+    const nMath::LineSegment los = nMath::LineSegment{ source, _receiver };
+    if (result.config == SoundPropagation::PRD_FULL)
+    {
+        result.intersections.clear();
+        result.intersections.push_back(los);
+    }
+    if (room->Intersects(los))
     {
         result.gain = 0.f;
         return;

@@ -69,9 +69,6 @@ MainComponent::MainComponent() :
     flag_update_working = false;
     flag_gamma_correct = false;
 
-    ray_cast_collector = std::make_unique<RayCastCollector>();
-    mutex_ray_cast_collector = std::make_unique<std::mutex>();
-
     mutex_emitter_update = std::make_unique<std::mutex>();
 
     setAudioChannels(0, 2);
@@ -253,7 +250,7 @@ MainComponent::MainComponent() :
     for (int i = 0; i < (int)simulation_results.size(); ++i)
     {
         simulation_results[i].lock = RW_NONE;
-        simulation_results[i].object = std::make_unique<PropagationResult>();
+        simulation_results[i].object = std::make_unique<PropagationResult>(PropagationResult{ SoundPropagation::PRD_FULL });
     }
     write_index = 0;
     read_index = 1;
@@ -493,15 +490,27 @@ void MainComponent::paint (Graphics& _g)
     const float zoom_factor = 10.f;
     PaintRoom(_g, bounds, zoom_factor);
 
-    if (show_ray_casts)
-    {
-        PaintRayCasts(_g, bounds, zoom_factor);
-    }
-
     ReadWriteControl rw = RW_NONE;
     const uint32 current_read_index = read_index;
     if (simulation_results[current_read_index].lock.compare_exchange_strong(rw, RW_READING))
-    {
+    {        
+        if (show_ray_casts)
+        {
+            const PropagationResult& result = *simulation_results[current_read_index].object;
+            if (result.intersections.size() > 0)
+            {
+                const float min_extent = (float)std::min(bounds.getWidth(), bounds.getHeight());
+                const nMath::Vector center{ min_extent / 2.f, min_extent / 2.f, 0.f };
+                _g.setColour(Colour::fromRGB(0x0, 0xAA, 0xAA));
+                for (const nMath::LineSegment line : result.intersections)
+                {
+                    _g.drawLine((line.start.x * zoom_factor) + center.x,
+                        -(line.start.y * zoom_factor) + center.y,
+                        (line.end.x * zoom_factor) + center.x,
+                        -(line.end.y * zoom_factor) + center.y);
+                }
+            }
+        }
         simulation_results[current_read_index].lock = RW_NONE;
     }
 
@@ -571,28 +580,6 @@ void MainComponent::PaintRoom(Graphics& _g, const Rectangle<int> _bounds, const 
         //        }
         //    }
         //}
-    }
-}
-
-void MainComponent::PaintRayCasts(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const
-{
-    if (ray_cast_collector != nullptr)
-    {
-        std::lock_guard<std::mutex> guard(*mutex_ray_cast_collector);
-        auto& ray_casts = ray_cast_collector->RayCasts();
-        if (ray_casts.size() > 0)
-        {
-            const float min_extent = (float)std::min(_bounds.getWidth(), _bounds.getHeight());
-            const nMath::Vector center{ min_extent / 2.f, min_extent / 2.f, 0.f };
-            _g.setColour(Colour::fromRGB(0x0, 0xAA, 0xAA));
-            for (const nMath::LineSegment line : ray_casts)
-            {
-                _g.drawLine((line.start.x * _zoom_factor) + center.x,
-                    -(line.start.y * _zoom_factor) + center.y,
-                    (line.end.x * _zoom_factor) + center.x,
-                    -(line.end.y * _zoom_factor) + center.y);
-            }
-        }        
     }
 }
 
@@ -792,13 +779,6 @@ void MainComponent::update()
     const float time_now = (float)(Time::currentTimeMillis() % ((1 + (int)test_frequency) * 1000));// TODO: start at t = 0 or store in planner.
     if (room != nullptr)
     {
-        const bool ray_casts = show_ray_casts;
-        if (ray_casts)
-        {
-            std::lock_guard<std::mutex> guard(*mutex_ray_cast_collector);
-            ray_cast_collector->Reset();
-            room->SwapCollector(ray_cast_collector);
-        }
         const float min_extent = (float)std::min(getBounds().getWidth(), getBounds().getHeight());
         const nMath::Vector center{ min_extent / 2.f, min_extent / 2.f, 0.f };
         const float inv_zoom_factor = 1.f/10.f;
@@ -812,7 +792,6 @@ void MainComponent::update()
         planner = PropagationPlanner::MakePlanner(current_method);
         planner->Preprocess(room);
         planner->Plan(planner_config);
-                
 
         uint32 result_buffer_size = (uint32)simulation_results.size();
         const uint32 local_read_index = read_index;
@@ -840,10 +819,6 @@ void MainComponent::update()
 
         const float simulated_gain = simulation_result.object->gain;
         moving_emitter->ComputeGain(simulated_gain);
-        if (ray_casts)
-        {
-            room->SwapCollector(ray_cast_collector);
-        }
     }
     
     if (show_spl.load() &&        
@@ -879,7 +854,7 @@ void MainComponent::update()
                 std::vector<float> previous_row; previous_row.resize(extent);
                 std::fill(previous_row.begin(), previous_row.end(), FLT_MAX);
 
-                PropagationResult result;
+                PropagationResult result{ SoundPropagation::PRD_GAIN };
                 
                 for (int i = 0; i < extent; ++i)
                 {

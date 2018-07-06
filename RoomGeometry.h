@@ -63,28 +63,11 @@ private:
     float pan_amount;
 };
 
-class RayCastCollector
-{
-private:
-    std::vector<nMath::LineSegment> ray_casts;
-
-public:
-    typedef std::add_const<std::add_lvalue_reference<decltype(ray_casts)>::type>::type ConstRefLineSegments;
-    RayCastCollector() {}
-
-    void Reset();
-
-    void Add(const nMath::LineSegment& ray_cast);
-
-    auto RayCasts() -> ConstRefLineSegments const;
-};
-
 class RoomGeometry
 {
 private:
     std::vector<nMath::LineSegment> walls;
     nMath::LineSegment bounding_box;
-    std::unique_ptr<RayCastCollector> ray_cast_collector;
 public:
     typedef std::add_const<std::add_lvalue_reference<decltype(walls)>::type>::type ConstRefLineSegments;
     RoomGeometry();
@@ -98,9 +81,5 @@ public:
         return walls; 
     }
 
-    void SwapCollector(std::unique_ptr<RayCastCollector>& collector);
-
 private:
-    template<bool capture_debug>
-    void CaptureDebug(const nMath::LineSegment& _line) const;
 };

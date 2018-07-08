@@ -121,6 +121,21 @@ MainComponent::MainComponent() :
     label_loadfile.setText("[None]", dontSendNotification);
     addChildComponent(label_loadfile);
     
+    button_save_image.setButtonText("Save Image");
+    button_save_image.onClick = [this]() {
+        FileChooser chooser("Select Image File", File::getCurrentWorkingDirectory(), "*.png");
+        if (chooser.browseForFileToOpen())
+        {
+            const File image_file = chooser.getResult().withFileExtension(".png");
+            PNGImageFormat png_format;
+            FileOutputStream file_output(image_file);
+            std::lock_guard<std::mutex> guard(mutex_image);            
+            png_format.writeImageToStream(image_spl, file_output);
+            file_output.flush();
+        }
+    };
+    addAndMakeVisible(&button_save_image);
+
     addAndMakeVisible(&slider_gain);
     slider_gain.setRange(0.0, 2.0, 0.05);
     slider_gain.setTextValueSuffix(" %");
@@ -471,11 +486,13 @@ void MainComponent::paint (Graphics& _g)
             flag_refresh_image.store(false);
         }
         _g.drawImageAt(image_spl, 0, 0);
-    }    
+    }
 
     const Rectangle<int> bounds = _g.getClipBounds();
     const float zoom_factor = 10.f;
     PaintRoom(_g, bounds, zoom_factor);
+
+    
 
     ReadWriteControl rw = RW_NONE;
     const uint32 current_read_index = read_index;
@@ -640,6 +657,8 @@ void MainComponent::resized()
     juce::Rectangle<int> frame_atmosphere = frame.removeFromTop(116).reduced(2);
     frame_atmosphere.setLeft(frame_atmosphere.getX() - 40);
     group_atmosphere.setBounds(frame_atmosphere);
+
+    button_save_image.setBounds(frame_next());
 }
 
 // Audio Component

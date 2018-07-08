@@ -178,6 +178,8 @@ private:
     TextButton button_loadfile;
     Label label_loadfile;
 
+    TextButton button_save_image;
+
     Slider slider_spl_freq;
     Label label_spl_freq;
     std::atomic<float> test_frequency;

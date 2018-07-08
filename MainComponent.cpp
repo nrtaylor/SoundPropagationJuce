@@ -126,7 +126,7 @@ MainComponent::MainComponent() :
         FileChooser chooser("Select Image File", File::getCurrentWorkingDirectory(), "*.png");
         if (chooser.browseForFileToOpen())
         {
-            ExportAsImage(chooser.getResult(), 1024, 1024);
+            ExportAsImage(chooser.getResult(), 1024, 1024, 2.f);
         }
     };
     addAndMakeVisible(&button_save_image);
@@ -582,7 +582,7 @@ void MainComponent::PaintRoom(Graphics& _g, const Rectangle<int> _bounds, const 
     }
 }
 
-void MainComponent::ExportAsImage(const File& file, const int width, const int height)
+void MainComponent::ExportAsImage(const File& file, const int width, const int height, const float _zoom_factor)
 {
     jassert(width == height); // non-square images not supported yet
     const File image_file = file.withFileExtension(".png");
@@ -607,9 +607,9 @@ void MainComponent::ExportAsImage(const File& file, const int width, const int h
     planner->Preprocess(room);
     planner->Plan(planner_config);
 
-    GenerateSPLImage(export_image, planner, room, time_now);
+    GenerateSPLImage(export_image, planner, room, time_now, _zoom_factor);
     Graphics g(export_image);
-    PaintRoom(g, export_image.getBounds(), 10.f);
+    PaintRoom(g, export_image.getBounds(), _zoom_factor * 10.f);
     png_format.writeImageToStream(export_image, file_output);
     file_output.flush();
 }
@@ -796,10 +796,11 @@ void MainComponent::GenerateSPLImage(Image& _image,
     std::shared_ptr<PropagationPlanner> planner, 
     std::shared_ptr<RoomGeometry> room, 
     const float _time,
+    const float _zoom_factor,
     const bool _allow_timeout)
 {
     const nMath::Vector center{ _image.getWidth() / 2.f, _image.getWidth() / 2.f, 0.f };
-    const float inv_zoom_factor = 1.f / 10.f;
+    const float inv_zoom_factor = 1.f / (_zoom_factor * 10.f);
 
     const bool overlay_contours = show_contours.load();
     const bool gamma_correct = flag_gamma_correct.load();
@@ -958,7 +959,7 @@ void MainComponent::update()
 
             std::thread worker = std::thread([this, planner, room, time_now] {
                 std::lock_guard<std::mutex> guard(mutex_image);
-                GenerateSPLImage(image_next, planner, room, time_now);
+                GenerateSPLImage(image_next, planner, room, time_now, 1.f, true);
                 flag_update_working.store(false);
                 flag_refresh_image.store(true);
             });

@@ -388,19 +388,6 @@ MainComponent::MainComponent() :
     addAndMakeVisible(&label_method);
     label_method.setText("Method", dontSendNotification);
     label_method.attachToComponent(&combo_method, true);
-
-    addAndMakeVisible(&combo_compare_to_method);
-    combo_compare_to_method.addListener(this);
-    combo_compare_to_method.addItem("Off", SoundPropagation::Method_Off);
-    combo_compare_to_method.addItem("Specular (LOS)", SoundPropagation::Method_SpecularLOS);
-    combo_compare_to_method.addItem("Ray Casts", SoundPropagation::Method_RayCasts);
-    combo_compare_to_method.addItem("A*", SoundPropagation::Method_Pathfinding);
-    current_compare_to_method = SoundPropagation::Method_Off;
-    combo_compare_to_method.setSelectedId(SoundPropagation::Method_Off);
-
-    addAndMakeVisible(&label_compare_to_method);
-    label_compare_to_method.setText("Compare to", dontSendNotification);
-    label_compare_to_method.attachToComponent(&combo_compare_to_method, true);
 }
 
 MainComponent::~MainComponent()
@@ -632,7 +619,6 @@ void MainComponent::resized()
 
     // Global
     combo_method.setBounds(frame_next());
-    combo_compare_to_method.setBounds(frame_next());
     combo_room.setBounds(frame_next());
 
     juce::Rectangle<int> frame_button_l = frame_next();
@@ -1023,9 +1009,5 @@ void MainComponent::comboBoxChanged(ComboBox* comboBoxThatHasChanged)
         current_method = static_cast<SoundPropagation::MethodType>(combo_method.getSelectedId());        
         sources[selected_source].planner = PropagationPlanner::MakePlanner(current_method);
         planners_refresh = true;
-    }
-    else if (comboBoxThatHasChanged == &combo_compare_to_method)
-    {
-        current_compare_to_method = static_cast<SoundPropagation::MethodType>(combo_compare_to_method.getSelectedId());
     }
 }

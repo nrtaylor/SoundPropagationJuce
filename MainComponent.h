@@ -148,9 +148,6 @@ private:
     ComboBox combo_method;
     Label label_method;
 
-    ComboBox combo_compare_to_method;
-    Label label_compare_to_method;
-
     std::atomic<SoundPropagation::MethodType> current_method;
     std::atomic<SoundPropagation::MethodType> current_compare_to_method;
 

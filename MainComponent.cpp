@@ -126,12 +126,7 @@ MainComponent::MainComponent() :
         FileChooser chooser("Select Image File", File::getCurrentWorkingDirectory(), "*.png");
         if (chooser.browseForFileToOpen())
         {
-            const File image_file = chooser.getResult().withFileExtension(".png");
-            PNGImageFormat png_format;
-            FileOutputStream file_output(image_file);
-            std::lock_guard<std::mutex> guard(mutex_image);            
-            png_format.writeImageToStream(image_spl, file_output);
-            file_output.flush();
+            ExportAsImage(chooser.getResult(), 600, 600);
         }
     };
     addAndMakeVisible(&button_save_image);
@@ -585,6 +580,23 @@ void MainComponent::PaintRoom(Graphics& _g, const Rectangle<int> _bounds, const 
         //    }
         //}
     }
+}
+
+void MainComponent::ExportAsImage(const File& file, const int width, const int height)
+{
+    (void)width;
+    (void)height;
+
+    const File image_file = file.withFileExtension(".png");
+    PNGImageFormat png_format;
+    FileOutputStream file_output(image_file);
+    std::lock_guard<std::mutex> guard(mutex_image);
+    Image export_image(image_spl);
+    export_image.duplicateIfShared();
+    Graphics g(export_image);
+    PaintRoom(g, export_image.getBounds(), 10.f);
+    png_format.writeImageToStream(export_image, file_output);
+    file_output.flush();
 }
 
 void MainComponent::resized()

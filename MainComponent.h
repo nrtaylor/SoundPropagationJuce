@@ -202,5 +202,7 @@ private:
     void PaintEmitter(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const;
     void PaintRoom(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const;
 
+    void ExportAsImage(const File& file, const int width, const int height);
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };

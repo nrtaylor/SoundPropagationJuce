@@ -126,7 +126,7 @@ MainComponent::MainComponent() :
         FileChooser chooser("Select Image File", File::getCurrentWorkingDirectory(), "*.png");
         if (chooser.browseForFileToOpen())
         {
-            ExportAsImage(chooser.getResult(), 600, 600);
+            ExportAsImage(chooser.getResult(), 1024, 1024);
         }
     };
     addAndMakeVisible(&button_save_image);
@@ -584,15 +584,30 @@ void MainComponent::PaintRoom(Graphics& _g, const Rectangle<int> _bounds, const 
 
 void MainComponent::ExportAsImage(const File& file, const int width, const int height)
 {
-    (void)width;
-    (void)height;
-
+    jassert(width == height); // non-square images not supported yet
     const File image_file = file.withFileExtension(".png");
     PNGImageFormat png_format;
     FileOutputStream file_output(image_file);
-    std::lock_guard<std::mutex> guard(mutex_image);
-    Image export_image(image_spl);
-    export_image.duplicateIfShared();
+    //std::lock_guard<std::mutex> guard(mutex_image);    
+    Image export_image = ImageHelper::SquareImage(juce::Rectangle<int>(width, height));
+    const float time_now = (float)(Time::currentTimeMillis() % ((1 + (int)test_frequency) * 1000));
+
+    nMath::Vector emitter_pos;
+    {
+        std::lock_guard<std::mutex> guard(*mutex_emitter_update);
+        emitter_pos = moving_emitter->Update(0);
+    }
+    std::shared_ptr<RoomGeometry> room = current_room;
+    const PropagationPlanner::SourceConfig planner_config = {
+        emitter_pos,
+        test_frequency.load(),
+        time_scale.load()
+    };
+    std::shared_ptr<PropagationPlanner> planner = PropagationPlanner::MakePlanner(current_method);
+    planner->Preprocess(room);
+    planner->Plan(planner_config);
+
+    GenerateSPLImage(export_image, planner, room, time_now);
     Graphics g(export_image);
     PaintRoom(g, export_image.getBounds(), 10.f);
     png_format.writeImageToStream(export_image, file_output);
@@ -777,6 +792,98 @@ _declspec(noinline) bool WasteTime(int seed)
     return j > 0.f;
 }
 
+void MainComponent::GenerateSPLImage(Image& _image, 
+    std::shared_ptr<PropagationPlanner> planner, 
+    std::shared_ptr<RoomGeometry> room, 
+    const float _time,
+    const bool _allow_timeout)
+{
+    const nMath::Vector center{ _image.getWidth() / 2.f, _image.getWidth() / 2.f, 0.f };
+    const float inv_zoom_factor = 1.f / 10.f;
+
+    const bool overlay_contours = show_contours.load();
+    const bool gamma_correct = flag_gamma_correct.load();
+    const int extent = _image.getWidth();
+    const Image::BitmapData bitmap(_image, Image::BitmapData::writeOnly);
+
+#ifdef PROFILE_SIMULATION
+    Thread::sleep(5000);
+#endif
+    uint8* pixel = bitmap.getPixelPointer(0, 0);
+
+    // for contours
+    std::vector<float> previous_row; previous_row.resize(extent);
+    std::fill(previous_row.begin(), previous_row.end(), FLT_MAX);
+
+    PropagationResult result{ SoundPropagation::PRD_GAIN };
+
+    for (int i = 0; i < extent; ++i)
+    {
+        for (int j = 0; j < extent; ++j)
+        {
+#ifdef PROFILE_SIMULATION
+            if (!WasteTime(j))
+            {
+                break;
+            }
+#endif
+            if (_allow_timeout &&
+                !flag_update_working)
+            {
+                flag_refresh_image.store(true);
+                return; // task cancelled
+            }
+
+            const nMath::Vector pixel_to_world = { (j - center.x) * inv_zoom_factor,
+                (i - center.y) * -inv_zoom_factor,
+                0.f };
+            planner->Simulate(result, pixel_to_world, _time);
+            float energy = result.gain;
+            int contour_color = -1;
+
+            if (overlay_contours)
+            {
+                const int num_countours = 6;
+                float threshold = 0.5f;
+                for (int c = 0; c < num_countours; ++c)
+                {
+                    if (energy <= threshold &&
+                        ((j && previous_row[j - 1] > threshold) ||
+                        (i && previous_row[j] > threshold)))
+                    {
+                        contour_color = 192 - (c * 32);
+                        break;
+                    }
+                    else if (energy > threshold &&
+                        ((j && previous_row[j - 1] <= threshold) ||
+                        (i && previous_row[j] <= threshold)))
+                    {
+                        contour_color = 192 - (c * 32);
+                        break;
+                    }
+                    threshold /= 2.f;
+                }
+
+                previous_row[j] = energy;
+            }
+
+            energy = jmax<float>(0.f, energy);
+            if (gamma_correct)
+            {
+                energy = sqrtf(energy);
+            }
+
+            const uint8 colour = contour_color > 0 ?
+                (uint8)contour_color :
+                (uint8)jmin<uint32>(255, (uint32)(255.f*energy));
+            *pixel++ = colour;
+            *pixel++ = colour;
+            *pixel++ = colour;
+            *pixel++ = 0xFF;
+        }
+    }
+}
+
 // Animated Component
 void MainComponent::update()
 {
@@ -792,7 +899,6 @@ void MainComponent::update()
     }    
     std::shared_ptr<PropagationPlanner> planner = sources[selected_source].planner;
     std::shared_ptr<RoomGeometry> room = current_room; // this isn't guarunteed atomic
-    const SoundPropagation::MethodType simulation_method = current_method.load();
     const float time_now = (float)(Time::currentTimeMillis() % ((1 + (int)test_frequency) * 1000));// TODO: start at t = 0 or store in planner.
     if (room != nullptr)
     {
@@ -848,100 +954,11 @@ void MainComponent::update()
             {
                 std::lock_guard<std::mutex> guard(mutex_image);
                 image_next = ImageHelper::SquareImage(getBounds());
-            }            
+            }
 
-            bool overlay_contours = show_contours.load();
-
-            std::thread worker = std::thread([this, simulation_method, emitter_pos, overlay_contours, planner, time_now] {
+            std::thread worker = std::thread([this, planner, room, time_now] {
                 std::lock_guard<std::mutex> guard(mutex_image);
-                std::shared_ptr<RoomGeometry> room = current_room;
-                const SoundPropagation::MethodType simulation_compare_to = current_compare_to_method.load();
-                const nMath::Vector center{ image_next.getWidth() / 2.f, image_next.getWidth() / 2.f, 0.f };
-                const float inv_zoom_factor = 1.f / 10.f;
-
-                const int extent = image_next.getWidth();
-                const Image::BitmapData bitmap(image_next, Image::BitmapData::writeOnly);
-
-#ifdef PROFILE_SIMULATION
-                Thread::sleep(5000);
-#endif
-                uint8* pixel = bitmap.getPixelPointer(0, 0);
-
-                // for contours
-                std::vector<float> previous_row; previous_row.resize(extent);
-                std::fill(previous_row.begin(), previous_row.end(), FLT_MAX);
-
-                PropagationResult result{ SoundPropagation::PRD_GAIN };
-                
-                for (int i = 0; i < extent; ++i)
-                {
-                    for (int j = 0; j < extent; ++j)
-                    {
-#ifdef PROFILE_SIMULATION
-                        if (!WasteTime(j))
-                        {
-                            break;
-                        }
-#endif
-                        if (!flag_update_working)
-                        {
-                            flag_refresh_image.store(true);
-                            return; // task cancelled
-                        }
-
-                        const nMath::Vector pixel_to_world = { (j - center.x) * inv_zoom_factor,
-                                                           (i - center.y) * -inv_zoom_factor,
-                                                            0.f };
-                        planner->Simulate(result, pixel_to_world, time_now);
-                        float energy = result.gain;
-                        //if (simulation_compare_to != SoundPropagation::Method_Off)
-                        //{
-                        //    float compare_to_energy = room->Simulate(emitter_pos, pixel_to_world, simulation_compare_to);
-                        //    energy = fabs(energy - compare_to_energy);                            
-                        //}
-                        int contour_color = -1;
-
-                        if (overlay_contours)
-                        {
-                            const int num_countours = 6;
-                            float threshold = 0.5f;
-                            for (int c = 0; c < num_countours; ++c)
-                            {
-                                if (energy <= threshold &&
-                                    ((j && previous_row[j - 1] > threshold) ||
-                                    (i && previous_row[j] > threshold)))
-                                {
-                                    contour_color = 192 - (c * 32);
-                                    break;
-                                }
-                                else if (energy > threshold &&
-                                    ((j && previous_row[j - 1] <= threshold) ||
-                                    (i && previous_row[j] <= threshold)))
-                                {
-                                    contour_color = 192 - (c * 32);
-                                    break;
-                                }
-                                threshold /= 2.f;
-                            }
-
-                            previous_row[j] = energy;
-                        }
-
-                        energy = jmax<float>(0.f, energy);
-                        if (flag_gamma_correct.load())
-                        {
-                            energy = sqrtf(energy);
-                        }
-
-                        const uint8 colour = contour_color > 0 ?
-                            (uint8)contour_color :
-                            (uint8)jmin<uint32>(255, (uint32)(255.f*energy));
-                        *pixel++ = colour;
-                        *pixel++ = colour;
-                        *pixel++ = colour;
-                        *pixel++ = 0xFF;
-                    }
-                }
+                GenerateSPLImage(image_next, planner, room, time_now);
                 flag_update_working.store(false);
                 flag_refresh_image.store(true);
             });

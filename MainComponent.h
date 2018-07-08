@@ -202,6 +202,7 @@ private:
     void PaintEmitter(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const;
     void PaintRoom(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const;
 
+    void GenerateSPLImage(Image& _image, std::shared_ptr<PropagationPlanner> planner, std::shared_ptr<RoomGeometry> room, const float _time, const bool _allow_timeout = false);
     void ExportAsImage(const File& file, const int width, const int height);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)

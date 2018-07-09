@@ -29,12 +29,18 @@ namespace SoundPropagation
 
 class RoomGeometry;
 
+struct PropagationSimulationCache
+{
+    virtual ~PropagationSimulationCache() = default;
+};
+
 struct PropagationResult
 {
     const SoundPropagation::ResultConfig config;
     float gain; // TODO: find better term. Perhaps dampening?
 
     std::vector<nMath::LineSegment> intersections;
+    std::shared_ptr<PropagationSimulationCache> cache;
 };
 
 class PropagationPlanner
@@ -51,6 +57,7 @@ public:
     };
     virtual void Plan(const SourceConfig& _config) = 0;
     virtual void Simulate(PropagationResult& result, const nMath::Vector& _receiver, const float _time_ms) const = 0;
+    virtual ~PropagationPlanner() = default;
 };
 
 class PlannerSpecularLOS : public PropagationPlanner

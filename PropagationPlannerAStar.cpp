@@ -85,16 +85,10 @@ void PriorityQueue<T, Less>::Pop()
     }
 }
 
-PlannerAStar::PlannerAStar()
-{
-    grid = std::make_unique<GeometryGrid>();
-    grid_cache = std::make_unique<GeometryGridCache>();
-}
-
 void PlannerAStar::Preprocess(std::shared_ptr<const RoomGeometry> _room)
 {
     room = _room;
-    std::fill_n(&(*grid)[0][0], GridResolution * GridResolution, false);
+    std::fill_n(&grid[0][0], GridResolution * GridResolution, false);
 
     auto& walls = room->Walls();
     for (const nMath::LineSegment& ls : walls)
@@ -131,7 +125,7 @@ void PlannerAStar::Preprocess(std::shared_ptr<const RoomGeometry> _room)
                 {
                     for (int j = nMath::Min(prev_grid_y, grid_y); j <= nMath::Max(prev_grid_y, grid_y); ++j)
                     {
-                        (*grid)[j][i - 1] = true;
+                        grid[j][i - 1] = true;
                     }
                 }
                 prev_grid_y = grid_y;
@@ -160,7 +154,7 @@ void PlannerAStar::Preprocess(std::shared_ptr<const RoomGeometry> _room)
                 {
                     for (int j = nMath::Min(prev_grid_x, grid_x); j <= nMath::Max(prev_grid_x, grid_x); ++j)
                     {
-                        (*grid)[i - 1][j] = true;
+                        grid[i - 1][j] = true;
                     }
                 }
                 prev_grid_x = grid_x;
@@ -171,8 +165,6 @@ void PlannerAStar::Preprocess(std::shared_ptr<const RoomGeometry> _room)
 
 void PlannerAStar::Plan(const SourceConfig& _config)
 {
-    std::fill_n(&(*grid_cache)[0][0], GridResolution * GridResolution, -1.f);
-
     //if (grid_source.x < 0 || grid_source.y < 0 ||
     //    grid_receiver.x < 0 || grid_receiver.y < 0 ||
     //    grid_source.x >= GridResolution || grid_source.y >= GridResolution ||
@@ -184,20 +176,20 @@ void PlannerAStar::Plan(const SourceConfig& _config)
     const int grid_half = (int)GridResolution / 2;
     const nMath::Vector grid_source = _config.source * (float)GridCellsPerMeter + nMath::Vector{ (float)grid_half, (float)grid_half };
     source_coord = Coord{ (int)grid_source.y, (int)grid_source.x };
-    for (int i = 0; i < GridResolution; ++i)
-    {
-        for (int j = 0; j < GridResolution; ++j)
-        {
-            FindAStarDiscrete(Coord{ i, j });
-        }
-    }
+    //for (int i = 0; i < GridResolution; ++i)
+    //{
+    //    for (int j = 0; j < GridResolution; ++j)
+    //    {
+    //        FindAStarDiscrete(Coord{ i, j });
+    //    }
+    //}
 }
 
-float PlannerAStar::FindAStarDiscrete(const Coord& receiver_coord)
+float PlannerAStar::FindAStarDiscrete(PropagationResult& result, const Coord& receiver_coord, std::shared_ptr<AStarSimulateCache> cache) const
 {
-    if ((*grid)[receiver_coord.row][receiver_coord.col]) // wall
+    if (grid[receiver_coord.row][receiver_coord.col]) // wall
     {
-        (*grid_cache)[receiver_coord.row][receiver_coord.col] = 0.f;
+        cache->grid_result[receiver_coord.row][receiver_coord.col] = 0.f;
         return 0.f;
     }
 
@@ -274,7 +266,7 @@ float PlannerAStar::FindAStarDiscrete(const Coord& receiver_coord)
                 neighbor.col >= 0 && neighbor.col < GridResolution)
             {
                 GridNode& neighbor_info = heap_score[neighbor.row][neighbor.col];
-                if ((*grid)[neighbor.row][neighbor.col])
+                if (grid[neighbor.row][neighbor.col])
                 {
                     continue; // not a neighbor
                 }
@@ -302,32 +294,45 @@ float PlannerAStar::FindAStarDiscrete(const Coord& receiver_coord)
     const float distance = nMath::Max(FLT_EPSILON, heap_score[next_coord.row][next_coord.col].score / (1000.f * GridCellsPerMeter));
     const float geometric_attenuation = nMath::Min(1.f, 1.f / distance);
 
-    (*grid_cache)[receiver_coord.row][receiver_coord.col] = geometric_attenuation;
+    cache->grid_result[receiver_coord.row][receiver_coord.col] = geometric_attenuation;
 
-    //if (capture_debug)
-    //{
-    //    const int grid_half = (int)GridResolution / 2;
-    //    Coord coord = next_coord;
-    //    while (heap_score[coord.row][coord.col].link_index >= 0)
-    //    {
-    //        GridNode& coord_info = heap_score[coord.row][coord.col];
-    //        Coord incoming_coord = coord;
-    //        incoming_coord.row -= neighbors[coord_info.link_index].row;
-    //        incoming_coord.col -= neighbors[coord_info.link_index].col;
-    //        nMath::LineSegment segment{
-    //            { ((float)coord.col - grid_half) / GridCellsPerMeter, ((float)coord.row - grid_half) / GridCellsPerMeter, 0.f },
-    //            { ((float)incoming_coord.col - grid_half) / GridCellsPerMeter, ((float)incoming_coord.row - grid_half) / GridCellsPerMeter, 0.f }
-    //        };
-    //        CaptureDebug<capture_debug>(segment);
-    //        coord = incoming_coord;
-    //    }
-    //}
+    if (result.config == SoundPropagation::PRD_FULL)
+    {
+        result.intersections.clear();
+
+        const int grid_half = (int)GridResolution / 2;
+        Coord coord = next_coord;
+        while (heap_score[coord.row][coord.col].link_index >= 0)
+        {
+            GridNode& coord_info = heap_score[coord.row][coord.col];
+            Coord incoming_coord = coord;
+            incoming_coord.row -= neighbors[coord_info.link_index].row;
+            incoming_coord.col -= neighbors[coord_info.link_index].col;
+            const nMath::LineSegment&& segment{
+                { ((float)coord.col - grid_half) / GridCellsPerMeter, ((float)coord.row - grid_half) / GridCellsPerMeter, 0.f },
+                { ((float)incoming_coord.col - grid_half) / GridCellsPerMeter, ((float)incoming_coord.row - grid_half) / GridCellsPerMeter, 0.f }
+            };
+            result.intersections.emplace_back(segment);
+            coord = incoming_coord;
+        }
+    }
     return geometric_attenuation;
 }
 
 void PlannerAStar::Simulate(PropagationResult& result, const nMath::Vector& _receiver, const float _time_ms) const
 {
     (void)_time_ms;
+    std::shared_ptr<AStarSimulateCache> cache = nullptr;
+    if (result.cache == nullptr)
+    {
+        cache = std::make_shared<AStarSimulateCache>();
+        std::fill_n(&cache->grid_result[0][0], GridResolution * GridResolution, -1.f);
+        result.cache = std::static_pointer_cast<PropagationSimulationCache>(cache);
+    }
+    else
+    {
+        cache = std::dynamic_pointer_cast<AStarSimulateCache>(result.cache);
+    }
 
     const int grid_half = (int)GridResolution / 2;
     nMath::Vector grid_receiver = _receiver * (float)GridCellsPerMeter + nMath::Vector{ (float)grid_half, (float)grid_half };
@@ -396,7 +401,12 @@ void PlannerAStar::Simulate(PropagationResult& result, const nMath::Vector& _rec
         if (test_coord.col < GridResolution &&
             test_coord.row < GridResolution)
         {
-            sum += bary[i] * (*grid_cache)[test_coord.row][test_coord.col];
+            float gain = cache->grid_result[test_coord.row][test_coord.col];
+            if (gain < 0)
+            {
+                gain = FindAStarDiscrete(result, receiver_coord, cache);
+            }
+            sum += bary[i] * gain;
         }
     }
 

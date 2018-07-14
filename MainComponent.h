@@ -66,6 +66,12 @@ struct ReadWriteObject
     T object;
 };
 
+struct PlannerToResult
+{
+    std::shared_ptr<const PropagationPlanner> planner;
+    std::unique_ptr<PropagationResult> result;
+};
+
 //==============================================================================
 /*
     This component lives inside our window, and this is where you should put all
@@ -123,7 +129,7 @@ private:
     std::vector<std::shared_ptr<RoomGeometry>> rooms;
     std::shared_ptr<RoomGeometry> current_room;
     
-    using ReadWriteResult = ReadWriteObject<std::unique_ptr<PropagationResult> >;
+    using ReadWriteResult = ReadWriteObject<PlannerToResult>;
     std::array<ReadWriteResult, 3> simulation_results;
     uint32 write_index;
     std::atomic_uint32_t read_index;

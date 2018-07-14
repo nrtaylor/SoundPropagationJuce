@@ -16,6 +16,11 @@ public:
         container.reserve(storage_size);
     }
 
+    bool Empty() const
+    {
+        return container.empty();
+    }
+
     void Push(T&& _val);
     void Pop();
     const T& Top() const
@@ -93,8 +98,8 @@ void PlannerAStar::Preprocess(std::shared_ptr<const RoomGeometry> _room)
     auto& walls = room->Walls();
     for (const nMath::LineSegment& ls : walls)
     {
-        nMath::Vector start = ls.start;
-        nMath::Vector end = ls.end;
+        const nMath::Vector start = ls.start;
+        const nMath::Vector end = ls.end;
         // Update Grid
         const int grid_half = (int)GridResolution / 2;
         nMath::LineSegment grid_line{
@@ -102,7 +107,7 @@ void PlannerAStar::Preprocess(std::shared_ptr<const RoomGeometry> _room)
             end * (float)GridCellsPerMeter + nMath::Vector{ (float)grid_half, (float)grid_half }
         };
 
-        if (fabsf(end.x - start.x) > fabsf(end.y - start.y))
+        if (fabsf(end.x - start.x) < fabsf(end.y - start.y))
         {
             if (end.x < start.x)
             {
@@ -110,23 +115,24 @@ void PlannerAStar::Preprocess(std::shared_ptr<const RoomGeometry> _room)
             }
 
             const int grid_start = nMath::Max(0, (int)grid_line.start.x);
-            const int grid_end = nMath::Min((int)GridResolution, (int)ceilf(grid_line.end.x));
+            const int grid_end = nMath::Min((int)GridResolution - 1, (int)ceilf(grid_line.end.x));
 
-            const float inv_delta = 1.f / (grid_line.start.x - grid_line.end.x);
-            const float delta_y = grid_line.start.y - grid_line.end.y;
-            int prev_grid_y = -1;
+            const float inv_delta = 1.f / (grid_line.end.x - grid_line.start.x);
+            const float delta_y = grid_line.end.y - grid_line.start.y;
+            int prev_grid_y = (int)grid_line.start.y;
             for (int i = grid_start; i <= grid_end; ++i)
             {
-                float t = ((float)i - grid_line.end.x) * inv_delta;
+                float t = ((float)i - grid_line.start.x) * inv_delta; // can be nan
                 t = nMath::Max(0.f, nMath::Min(1.f, t)); // end points
-                const float y = grid_line.end.y + t * delta_y; // prevent rounding error when start.y == end.y
-                const int grid_y = nMath::Min<int>(nMath::Max(0, (int)y), (int)GridResolution - 1);
-                if (prev_grid_y >= 0)
+                if (grid_start == grid_end)
                 {
-                    for (int j = nMath::Min(prev_grid_y, grid_y); j <= nMath::Max(prev_grid_y, grid_y); ++j)
-                    {
-                        grid[j][i - 1] = true;
-                    }
+                    t = 1.f;
+                }
+                const float y = grid_line.start.y + t * delta_y; // prevent rounding error when start.y == end.y
+                const int grid_y = nMath::Min<int>(nMath::Max(0, (int)y), (int)GridResolution - 1);
+                for (int j = nMath::Min(prev_grid_y, grid_y); j <= nMath::Max(prev_grid_y, grid_y); ++j)
+                {
+                    grid[j][i] = true;
                 }
                 prev_grid_y = grid_y;
             }
@@ -139,23 +145,24 @@ void PlannerAStar::Preprocess(std::shared_ptr<const RoomGeometry> _room)
             }
 
             const int grid_start = nMath::Max(0, (int)grid_line.start.y);
-            const int grid_end = nMath::Min((int)GridResolution, (int)ceilf(grid_line.end.y));
+            const int grid_end = nMath::Min((int)GridResolution - 1, (int)ceilf(grid_line.end.y));
 
-            const float inv_delta = 1.f / (grid_line.start.y - grid_line.end.y);
-            const float delta_x = grid_line.start.x - grid_line.end.x;
-            int prev_grid_x = -1;
+            const float inv_delta = 1.f / (grid_line.end.y - grid_line.start.y);
+            const float delta_x = grid_line.end.x - grid_line.start.x;
+            int prev_grid_x = (int)grid_line.start.x;
             for (int i = grid_start; i <= grid_end; ++i)
             {
-                float t = ((float)i - grid_line.end.y) * inv_delta;
+                float t = ((float)i - grid_line.start.y) * inv_delta; // can be nan
                 t = nMath::Max(0.f, nMath::Min(1.f, t)); // end points
-                const float x = grid_line.end.x + t * delta_x; // prevent rounding error when start.y == end.y
-                const int grid_x = nMath::Min<int>(nMath::Max(0, (int)x), (int)GridResolution - 1);
-                if (prev_grid_x >= 0)
+                if (grid_start == grid_end)
                 {
-                    for (int j = nMath::Min(prev_grid_x, grid_x); j <= nMath::Max(prev_grid_x, grid_x); ++j)
-                    {
-                        grid[i - 1][j] = true;
-                    }
+                    t = 1.f;
+                }
+                const float x = grid_line.start.x + t * delta_x; // prevent rounding error when start.x == end.x
+                const int grid_x = nMath::Min<int>(nMath::Max(0, (int)x), (int)GridResolution - 1);
+                for (int j = nMath::Min(prev_grid_x, grid_x); j <= nMath::Max(prev_grid_x, grid_x); ++j)
+                {
+                    grid[i][j] = true;
                 }
                 prev_grid_x = grid_x;
             }
@@ -165,30 +172,19 @@ void PlannerAStar::Preprocess(std::shared_ptr<const RoomGeometry> _room)
 
 void PlannerAStar::Plan(const SourceConfig& _config)
 {
-    //if (grid_source.x < 0 || grid_source.y < 0 ||
-    //    grid_receiver.x < 0 || grid_receiver.y < 0 ||
-    //    grid_source.x >= GridResolution || grid_source.y >= GridResolution ||
-    //    grid_receiver.x >= GridResolution || grid_receiver.y >= GridResolution)
-    //{
-    //    return 0.f;
-    //};
-
     const int grid_half = (int)GridResolution / 2;
     const nMath::Vector grid_source = _config.source * (float)GridCellsPerMeter + nMath::Vector{ (float)grid_half, (float)grid_half };
     source_coord = Coord{ (int)grid_source.y, (int)grid_source.x };
-    //for (int i = 0; i < GridResolution; ++i)
-    //{
-    //    for (int j = 0; j < GridResolution; ++j)
-    //    {
-    //        FindAStarDiscrete(Coord{ i, j });
-    //    }
-    //}
 }
 
 float PlannerAStar::FindAStarDiscrete(PropagationResult& result, const Coord& receiver_coord, std::shared_ptr<AStarSimulateCache> cache) const
 {
     if (grid[receiver_coord.row][receiver_coord.col]) // wall
     {
+        if (result.config == SoundPropagation::PRD_FULL)
+        {
+            result.intersections.clear();
+        }
         cache->grid_result[receiver_coord.row][receiver_coord.col] = 0.f;
         return 0.f;
     }
@@ -250,6 +246,10 @@ float PlannerAStar::FindAStarDiscrete(PropagationResult& result, const Coord& re
         }
         if (++num_checked > max_test)
         {
+            if (result.config == SoundPropagation::PRD_FULL)
+            {
+                result.intersections.clear();
+            }
             return 0.f;
         }
 
@@ -288,6 +288,16 @@ float PlannerAStar::FindAStarDiscrete(PropagationResult& result, const Coord& re
                 }
             }
         }
+    }
+
+    if (prediction.Empty())
+    {
+        if (result.config == SoundPropagation::PRD_FULL)
+        {
+            result.intersections.clear();
+        }
+        cache->grid_result[receiver_coord.row][receiver_coord.col] = 0.f;
+        return 0.f;
     }
 
     Coord next_coord = prediction.Top().second;

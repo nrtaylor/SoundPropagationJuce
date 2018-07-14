@@ -8,17 +8,12 @@
 
 class PlannerAStar : public PropagationPlanner
 {
-private:
+public:
     const static uint32_t GridDistance = 60; // meters    
     const static uint32_t GridCellsPerMeter = 2;
     const static uint32_t GridResolution = GridCellsPerMeter * GridDistance;
     using GeometryGrid = std::array<std::array<bool, GridResolution>, GridResolution>;
-    using GeometryGridCache = std::array<std::array<float, GridResolution>, GridResolution>;
-    struct AStarSimulateCache : public PropagationSimulationCache
-    {
-        GeometryGridCache grid_result;
-    };
-
+private:
     enum GridNodeState : int8_t
     {
         GNS_NOT_FOUND = 0,
@@ -31,12 +26,18 @@ private:
         int8_t link_index;
         GridNodeState state;
     };
-    typedef std::array<std::array<GridNode, GridResolution>, GridResolution> GeometryGridScore;
+    using GeometryGridScore = std::array<std::array<GridNode, GridResolution>, GridResolution>;
 
     struct Coord
     {
         int row;
         int col;
+    };
+
+    using GeometryGridCache = std::array<std::array<float, GridResolution>, GridResolution>;
+    struct AStarSimulateCache : public PropagationSimulationCache
+    {
+        GeometryGridCache grid_result;
     };
 
 public:

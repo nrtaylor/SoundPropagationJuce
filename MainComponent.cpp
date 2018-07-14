@@ -11,6 +11,7 @@
 #include "nSignalProcessing.h"
 #include "RoomGeometry.h"
 #include "PropagationPlanner.h"
+#include "PropagationPlannerAStar.h"
 
 //#define PROFILE_SIMULATION
 
@@ -260,7 +261,10 @@ MainComponent::MainComponent() :
     for (int i = 0; i < (int)simulation_results.size(); ++i)
     {
         simulation_results[i].lock = RW_NONE;
-        simulation_results[i].object = std::make_unique<PropagationResult>(PropagationResult{ SoundPropagation::PRD_FULL });
+        simulation_results[i].object = {
+            nullptr,
+            std::make_unique<PropagationResult>(PropagationResult{ SoundPropagation::PRD_FULL })
+        };
     }
     write_index = 0;
     read_index = 1;
@@ -485,9 +489,7 @@ void MainComponent::paint (Graphics& _g)
 
     const Rectangle<int> bounds = _g.getClipBounds();
     const float zoom_factor = 10.f;
-    PaintRoom(_g, bounds, zoom_factor);
-
-    
+    PaintRoom(_g, bounds, zoom_factor);    
 
     ReadWriteControl rw = RW_NONE;
     const uint32 current_read_index = read_index;
@@ -495,7 +497,7 @@ void MainComponent::paint (Graphics& _g)
     {        
         if (show_ray_casts)
         {
-            const PropagationResult& result = *simulation_results[current_read_index].object;
+            const PropagationResult& result = *simulation_results[current_read_index].object.result;
             if (result.intersections.size() > 0)
             {
                 const float min_extent = (float)std::min(bounds.getWidth(), bounds.getHeight());
@@ -507,6 +509,33 @@ void MainComponent::paint (Graphics& _g)
                         -(line.start.y * zoom_factor) + center.y,
                         (line.end.x * zoom_factor) + center.x,
                         -(line.end.y * zoom_factor) + center.y);
+                }
+            }
+        }
+        if (show_grid)
+        {
+            std::shared_ptr<const PropagationPlanner> planner = simulation_results[current_read_index].object.planner;
+            if (std::shared_ptr<const PlannerAStar> astar_planner
+                = std::dynamic_pointer_cast<const PlannerAStar>(planner))
+            {
+                const PlannerAStar::GeometryGrid& grid = astar_planner->Grid();
+                const float min_extent = (float)std::min(bounds.getWidth(), bounds.getHeight());
+                _g.setColour(Colour::fromRGBA(0x77, 0x77, 0x77, 0x99));
+                const int offset = (int)(min_extent / 2.f - zoom_factor * PlannerAStar::GridDistance / 2);
+                const int cellSize = 10 / PlannerAStar::GridCellsPerMeter;
+                for (int i = 0; i < PlannerAStar::GridResolution; ++i)
+                {
+                    for (int j = 0; j < PlannerAStar::GridResolution; ++j)
+                    {
+                        if (bool value = grid[i][j])
+                        {
+                            _g.fillRect(
+                                cellSize * j + offset + 1,
+                                cellSize * (PlannerAStar::GridResolution - i - 1) + offset - 1,
+                                cellSize - 1,
+                                cellSize - 1);
+                        }
+                    }
                 }
             }
         }
@@ -917,7 +946,7 @@ void MainComponent::update()
         planner->Preprocess(room);
         planner->Plan(planner_config);
 
-        uint32 result_buffer_size = (uint32)simulation_results.size();
+        const uint32 result_buffer_size = (uint32)simulation_results.size();
         const uint32 local_read_index = read_index;
         for (uint32 i = 0; i < result_buffer_size; ++i)
         {
@@ -935,13 +964,14 @@ void MainComponent::update()
         }
         jassert(write_index < result_buffer_size);
         ReadWriteResult& simulation_result = simulation_results[write_index];
-        planner->Simulate(*simulation_result.object, receiever_pos, 0.f);
+        simulation_result.object.planner = planner;
+        planner->Simulate(*simulation_result.object.result, receiever_pos, 0.f);
         
         simulation_result.lock = RW_NONE;
         read_index = write_index;
         ++write_index;        
 
-        const float simulated_gain = simulation_result.object->gain;
+        const float simulated_gain = simulation_result.object.result->gain;
         moving_emitter->ComputeGain(simulated_gain);
     }
     

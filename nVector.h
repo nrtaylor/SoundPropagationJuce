@@ -17,6 +17,18 @@ namespace nMath
         return (lhs > rhs) ? lhs : rhs;
     }
 
+    template <typename T>
+    inline T MinBounded(T lhs, T rhs, T low_bound)
+    {
+        return Max(low_bound, Min(lhs, rhs));
+    }
+
+    template <typename T>
+    inline T MaxBounded(T lhs, T rhs, T upper_bound)
+    {
+        return Min(upper_bound, Max(lhs, rhs));
+    }
+
     struct Vector
     {
         float x, y, z;

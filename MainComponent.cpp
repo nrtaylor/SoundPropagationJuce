@@ -522,7 +522,7 @@ void MainComponent::paint (Graphics& _g)
                 const float min_extent = (float)std::min(bounds.getWidth(), bounds.getHeight());
                 _g.setColour(Colour::fromRGBA(0x77, 0x77, 0x77, 0x99));
                 const int offset = (int)(min_extent / 2.f - zoom_factor * PlannerAStar::GridDistance / 2);
-                const int cellSize = 10 / PlannerAStar::GridCellsPerMeter;
+                const int cellSize = (int)zoom_factor / PlannerAStar::GridCellsPerMeter;
                 for (int i = 0; i < PlannerAStar::GridResolution; ++i)
                 {
                     for (int j = 0; j < PlannerAStar::GridResolution; ++j)
@@ -530,8 +530,8 @@ void MainComponent::paint (Graphics& _g)
                         if (bool value = grid[i][j])
                         {
                             _g.fillRect(
-                                cellSize * j + offset + 1,
-                                cellSize * (PlannerAStar::GridResolution - i - 1) + offset - 1,
+                                cellSize * j + offset,
+                                cellSize * (PlannerAStar::GridResolution - i - 1) + offset,
                                 cellSize - 1,
                                 cellSize - 1);
                         }

@@ -16,6 +16,7 @@ namespace SoundPropagation
         Method_RayCasts,
         Method_Pathfinding,
         Method_Wave,
+        Method_LOSAStarFallback,
 
         Method_Off
     };
@@ -62,6 +63,7 @@ public:
 
 class PlannerSpecularLOS : public PropagationPlanner
 {
+public:
     void Preprocess(std::shared_ptr<const RoomGeometry> _room) override;
     void Plan(const PropagationPlanner::SourceConfig& _config) override;
     void Simulate(PropagationResult& result, const nMath::Vector& _receiver, const float _time_ms) const override;
@@ -72,6 +74,7 @@ private:
 
 class PlannerRayCasts : public PropagationPlanner
 {
+public:
     void Preprocess(std::shared_ptr<const RoomGeometry> _room) override;
     void Plan(const PropagationPlanner::SourceConfig& _config) override;
     void Simulate(PropagationResult& result, const nMath::Vector& _receiver, const float _time_ms) const override;
@@ -80,6 +83,20 @@ private:
     std::shared_ptr<const RoomGeometry> room;
 
     bool Intersects(PropagationResult& result, const nMath::Vector& start, const nMath::Vector& end) const;
+};
+
+template<class PlannerPrimary, class PlannerSecondary>
+class PlannerTwoStages : public PropagationPlanner
+{
+public:
+    PlannerTwoStages();
+
+    void Preprocess(std::shared_ptr<const RoomGeometry> _room) override;
+    void Plan(const PropagationPlanner::SourceConfig& _config) override;
+    void Simulate(PropagationResult& result, const nMath::Vector& _receiver, const float _time_ms) const override;
+private:
+    std::unique_ptr<PlannerPrimary> planner_primary;
+    std::unique_ptr<PlannerSecondary> planner_secondary;
 };
 
 class PlannerWave : public PropagationPlanner

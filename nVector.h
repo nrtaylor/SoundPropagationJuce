@@ -18,15 +18,15 @@ namespace nMath
     }
 
     template <typename T>
-    inline T MinBounded(T lhs, T rhs, T low_bound)
+    inline T MinClamped(T lhs, T rhs, T min_value)
     {
-        return Max(low_bound, Min(lhs, rhs));
+        return Max(min_value, Min(lhs, rhs));
     }
 
     template <typename T>
-    inline T MaxBounded(T lhs, T rhs, T upper_bound)
+    inline T MaxClamped(T lhs, T rhs, T max_value)
     {
-        return Min(upper_bound, Max(lhs, rhs));
+        return Min(max_value, Max(lhs, rhs));
     }
 
     struct Vector

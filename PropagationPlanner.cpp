@@ -24,6 +24,9 @@ std::shared_ptr<PropagationPlanner> PropagationPlanner::MakePlanner(const SoundP
     case SoundPropagation::Method_Wave:
         planner = std::make_shared<PlannerWave>();
         break;
+    case SoundPropagation::Method_LOSAStarFallback:
+        planner = std::make_shared<PlannerTwoStages<PlannerSpecularLOS, PlannerAStar> >();
+        break;
     default:
         break;
     }
@@ -184,4 +187,35 @@ void PlannerWave::Simulate(PropagationResult& result, const nMath::Vector& _rece
 
     const float gain = 0.9f;
     result.gain = value * gain;
+}
+
+template<class PlannerPrimary, class PlannerSecondary>
+PlannerTwoStages<PlannerPrimary, PlannerSecondary>::PlannerTwoStages()
+{
+    planner_primary = std::make_unique<PlannerPrimary>();
+    planner_secondary = std::make_unique<PlannerSecondary>();
+}
+
+template<class PlannerPrimary, class PlannerSecondary>
+void PlannerTwoStages<PlannerPrimary, PlannerSecondary>::Preprocess(std::shared_ptr<const RoomGeometry> _room)
+{
+    planner_primary->Preprocess(_room);
+    planner_secondary->Preprocess(_room);
+}
+
+template<class PlannerPrimary, class PlannerSecondary>
+void PlannerTwoStages<PlannerPrimary, PlannerSecondary>::Plan(const PropagationPlanner::SourceConfig& _config)
+{
+    planner_primary->Plan(_config);
+    planner_secondary->Plan(_config);
+}
+
+template<class PlannerPrimary, class PlannerSecondary>
+void PlannerTwoStages<PlannerPrimary, PlannerSecondary>::Simulate(PropagationResult& result, const nMath::Vector& _receiver, const float _time_ms) const
+{
+    planner_primary->Simulate(result, _receiver, _time_ms);
+    if (result.gain <= 0.f)
+    {
+        planner_secondary->Simulate(result, _receiver, _time_ms);
+    }
 }

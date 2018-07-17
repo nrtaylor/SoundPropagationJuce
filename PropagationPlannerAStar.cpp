@@ -130,7 +130,7 @@ void PlannerAStar::Preprocess(std::shared_ptr<const RoomGeometry> _room)
                 }
                 const float y = grid_line.start.y + t * delta_y; // prevent rounding error when start.y == end.y
                 const int grid_y = nMath::Min<int>(nMath::Max(0, (int)y), (int)GridResolution - 1);
-                for (int j = nMath::MinBounded(prev_grid_y, grid_y, 0); j <= nMath::MaxBounded(prev_grid_y, grid_y, (int)GridResolution - 1); ++j)
+                for (int j = nMath::MinClamped(prev_grid_y, grid_y, 0); j <= nMath::MaxClamped(prev_grid_y, grid_y, (int)GridResolution - 1); ++j)
                 {
                     grid[j][i] = true;
                 }
@@ -160,7 +160,7 @@ void PlannerAStar::Preprocess(std::shared_ptr<const RoomGeometry> _room)
                 }
                 const float x = grid_line.start.x + t * delta_x; // prevent rounding error when start.x == end.x
                 const int grid_x = nMath::Min<int>(nMath::Max(0, (int)x), (int)GridResolution - 1);
-                for (int j = nMath::MinBounded(prev_grid_x, grid_x, 0); j <= nMath::MaxBounded(prev_grid_x, grid_x, (int)GridResolution - 1); ++j)
+                for (int j = nMath::MinClamped(prev_grid_x, grid_x, 0); j <= nMath::MaxClamped(prev_grid_x, grid_x, (int)GridResolution - 1); ++j)
                 {
                     grid[i][j] = true;
                 }
@@ -268,7 +268,7 @@ float PlannerAStar::FindAStarDiscrete(PropagationResult& result, const Coord& re
                 GridNode& neighbor_info = heap_score[neighbor.row][neighbor.col];
                 if (grid[neighbor.row][neighbor.col])
                 {
-                    continue; // not a neighbor
+                    continue; // not a neighbor; wall
                 }
                 if (neighbor_info.state == GNS_CHECKED)
                 {

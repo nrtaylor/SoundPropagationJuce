@@ -395,6 +395,7 @@ MainComponent::MainComponent() :
     combo_method.addItem("Specular (LOS)", SoundPropagation::Method_SpecularLOS);
     combo_method.addItem("Ray Casts", SoundPropagation::Method_RayCasts);
     combo_method.addItem("A*", SoundPropagation::Method_Pathfinding);
+    combo_method.addItem("LOS then A*", SoundPropagation::Method_LOSAStarFallback);
     combo_method.addItem("Wave Equation", SoundPropagation::Method_Wave);
     current_method = SoundPropagation::Method_SpecularLOS;
     combo_method.setSelectedId(SoundPropagation::Method_SpecularLOS);

@@ -88,27 +88,37 @@ MainComponent::MainComponent() :
     button_source[0].onClick = [this]() 
     { 
         selected_source = 0;
-        label_selected_sound.setText("Source 1", dontSendNotification); 
+        label_selected_sound.setText("Source 1", dontSendNotification);
+        RefreshSourceParams();
     };
     button_source[1].setButtonText("Source 2");
     button_source[1].onClick = [this]() 
     { 
         selected_source = 1;
         label_selected_sound.setText("Source 2", dontSendNotification); 
+        RefreshSourceParams();
     };
     button_source[2].setButtonText("Source 3");
     button_source[2].onClick = [this]() 
     { 
         selected_source = 2;
-        label_selected_sound.setText("Source 3", dontSendNotification); 
+        label_selected_sound.setText("Source 3", dontSendNotification);
+        RefreshSourceParams();
     };
+    const double default_emitter_gain = 0.8;
+    const double default_emitter_freq = 0.08;
+    const double default_emitter_radius = 10.0;
     for (int i = 0; i < 3; ++i)
     {
         button_source[i].setRadioGroupId(1001);
         button_source[i].setClickingTogglesState(true);
         addAndMakeVisible(button_source[i]);
 
-        sources[i].planner.reset(new PlannerSpecularLOS());
+        sources[i].planner.reset(new PlannerSpecularLOS());        
+        sources[i].moving_emitter = std::make_shared<MovingEmitter>();
+        sources[i].moving_emitter->SetGlobalGain((float)default_emitter_gain);
+        sources[i].moving_emitter->SetFrequency((float)default_emitter_freq);
+        sources[i].moving_emitter->SetRadius((float)default_emitter_radius);
         sources[i].source_type = PropagationSource::SOURCE_OFF;
     }
 
@@ -141,7 +151,7 @@ MainComponent::MainComponent() :
     addAndMakeVisible(&slider_gain);
     slider_gain.setRange(0.0, 2.0, 0.05);
     slider_gain.setTextValueSuffix(" %");
-    slider_gain.setValue(0.8);
+    slider_gain.setValue(default_emitter_gain);
     slider_gain.addListener(this);
 
     addAndMakeVisible(&label_gain);
@@ -151,7 +161,7 @@ MainComponent::MainComponent() :
     addAndMakeVisible(&slider_freq);
     slider_freq.setRange(0, 8.0, 0.001);
     slider_freq.setTextValueSuffix(" Hz");
-    slider_freq.setValue(0.08);
+    slider_freq.setValue(default_emitter_freq);
     slider_freq.setSkewFactorFromMidPoint(1.0);
     slider_freq.addListener(this);
 
@@ -162,7 +172,7 @@ MainComponent::MainComponent() :
     addAndMakeVisible(&slider_radius);
     slider_radius.setRange(0.1, 25.0, 0.1);
     slider_radius.setTextValueSuffix(" m");
-    slider_radius.setValue(10.0);
+    slider_radius.setValue(default_emitter_radius);
     slider_radius.addListener(this);
 
     addAndMakeVisible(&label_radius);
@@ -266,7 +276,7 @@ MainComponent::MainComponent() :
     atmospheric_filters[0]->bypass = true;
     atmospheric_filters[1] = std::make_unique<nDSP::Butterworth1Pole>();
     atmospheric_filters[1]->bypass = true;
-    moving_emitter = std::make_unique<MovingEmitter>();
+    
     for (int i = 0; i < (int)simulation_results.size(); ++i)
     {
         simulation_results[i].lock = RW_NONE;
@@ -524,7 +534,7 @@ void MainComponent::PaintEmitter(Graphics& _g, const Rectangle<int> _bounds, con
     nMath::Vector emitter_pos;
     {
         std::lock_guard<std::mutex> guard(*mutex_emitter_update);
-        emitter_pos = moving_emitter->GetPosition();
+        emitter_pos = sources[selected_source].moving_emitter->GetPosition();
     }
     nMath::Vector emitter_draw_pos{ emitter_pos.x * _zoom_factor + center.x, -emitter_pos.y * _zoom_factor + center.y, 0.f };
     _g.fillEllipse(emitter_draw_pos.x - 1.f, emitter_draw_pos.y - 1.f, 2.5, 2.5);
@@ -619,7 +629,7 @@ void MainComponent::ExportAsImage(const File& file, const int width, const int h
     nMath::Vector emitter_pos;
     {
         std::lock_guard<std::mutex> guard(*mutex_emitter_update);
-        emitter_pos = moving_emitter->Update(0);
+        emitter_pos = sources[selected_source].moving_emitter->Update(0);
     }
     std::shared_ptr<RoomGeometry> room = current_room;
     const PropagationPlanner::SourceConfig planner_config = {
@@ -690,9 +700,9 @@ void MainComponent::resized()
     combo_room.setBounds(frame_next());
 
     juce::Rectangle<int> frame_button_l = frame_next();
-    juce::Rectangle<int> frame_button_r = frame_button_l.removeFromRight(frame_button_l.getWidth() / 2);
-    button_show_spl.setBounds(frame_button_l);
-    button_show_ray_casts.setBounds(frame_button_r);
+    juce::Rectangle<int> frame_button_r = frame_button_l.removeFromRight(frame_button_l.getWidth() / 2);    
+    button_show_ray_casts.setBounds(frame_button_l);
+    button_show_spl.setBounds(frame_button_r);
     
     frame_button_l = frame_next();
     frame_button_r = frame_button_l.removeFromRight(frame_button_l.getWidth() / 2);
@@ -766,8 +776,8 @@ void MainComponent::getNextAudioBlock(const AudioSourceChannelInfo& bufferToFill
     const int channels = bufferToFill.buffer->getNumChannels();
     int samples_remaining = bufferToFill.numSamples;
     int sample_offset = bufferToFill.startSample;
-    const float gain_left = moving_emitter->Gain(0);
-    const float gain_right = moving_emitter->Gain(1);    
+    const float gain_left = source.moving_emitter->Gain(0);
+    const float gain_right = source.moving_emitter->Gain(1);
 
     while (samples_remaining > 0)
     {
@@ -913,6 +923,10 @@ void MainComponent::GenerateSPLImage(Image& _image,
 void MainComponent::update()
 {
     int32 frame_time = Time::getMillisecondCounter();
+    PropagationSource& source = sources[selected_source];
+    std::shared_ptr<PropagationPlanner> planner = source.planner;
+    std::shared_ptr<MovingEmitter> moving_emitter = source.moving_emitter;
+
     nMath::Vector emitter_pos;
     {
         std::lock_guard<std::mutex> guard(*mutex_emitter_update);
@@ -921,8 +935,7 @@ void MainComponent::update()
 #else
         emitter_pos = moving_emitter->Update(0);
 #endif
-    }    
-    std::shared_ptr<PropagationPlanner> planner = sources[selected_source].planner;
+    }        
     std::shared_ptr<RoomGeometry> room = current_room; // this isn't guarunteed atomic
     const float time_now = (float)(Time::currentTimeMillis() % ((1 + (int)test_frequency) * 1000));// TODO: start at t = 0 or store in planner.
     if (room != nullptr)
@@ -1005,11 +1018,11 @@ void MainComponent::sliderValueChanged(Slider* slider)
 {
     if (slider == &slider_gain)
     {
-        moving_emitter->SetGlobalGain((float)slider_gain.getValue());
+        sources[selected_source].moving_emitter->SetGlobalGain((float)slider_gain.getValue());
     }
     else if (slider == &slider_freq)
     {
-        moving_emitter->SetFrequency((float)slider_freq.getValue());
+        sources[selected_source].moving_emitter->SetFrequency((float)slider_freq.getValue());
     }
     else if (slider == &slider_spl_freq)
     {
@@ -1028,7 +1041,7 @@ void MainComponent::sliderValueChanged(Slider* slider)
         const double next_temperature = slider_temperature.getValue();
         const double next_humidity = slider_humidity.getValue();
         const double next_pressure = slider_pressure.getValue();
-        moving_emitter->SetRadius(next_radius);
+        sources[selected_source].moving_emitter->SetRadius(next_radius);
         const double filter_gain_at_cutoff_db = -3.;
         const double target_atmospheric_coefficient = -filter_gain_at_cutoff_db / (double)next_radius;
         const float cuttoff_frequency = (float)AtmosphericAbsorption::Frequency(target_atmospheric_coefficient, next_humidity, next_temperature, next_pressure);
@@ -1043,6 +1056,35 @@ void MainComponent::sliderValueChanged(Slider* slider)
     }
 }
 
+void MainComponent::RefreshSourceParams()
+{
+    const int32 source_id = selected_source.load();
+    const PropagationSource& source = sources[source_id];
+    if (source.source_type == PropagationSource::SOURCE_FILE)
+    {
+        label_loadfile.setText(source.test_buffer.name, dontSendNotification);
+
+        button_loadfile.setVisible(true);
+        label_loadfile.setVisible(true);
+        slider_spl_freq.setVisible(false);
+    }
+    else
+    {
+        button_loadfile.setVisible(false);
+        label_loadfile.setVisible(false);
+        slider_spl_freq.setVisible(true);
+    }
+
+    slider_freq.setValue(source.moving_emitter->GetFrequency());
+    slider_radius.setValue(source.moving_emitter->SetRadius());
+    slider_gain.setValue(source.moving_emitter->GetGlobalGain());
+
+    if (combo_selected_sound.getSelectedId() != static_cast<int>(source.source_type))
+    {
+        combo_selected_sound.setSelectedId(static_cast<int>(source.source_type), dontSendNotification);
+    }
+}
+
 void MainComponent::comboBoxChanged(ComboBox* comboBoxThatHasChanged)
 {
     if (comboBoxThatHasChanged == &combo_selected_sound)
@@ -1052,18 +1094,7 @@ void MainComponent::comboBoxChanged(ComboBox* comboBoxThatHasChanged)
         {
             const int32 source_id = selected_source.load();
             sources[source_id].source_type = (PropagationSource::SourceType)next_id;
-            if (next_id == PropagationSource::SOURCE_FILE)
-            {                
-                button_loadfile.setVisible(true);
-                label_loadfile.setVisible(true);
-                slider_spl_freq.setVisible(false);
-            }
-            else
-            {
-                button_loadfile.setVisible(false);
-                label_loadfile.setVisible(false);
-                slider_spl_freq.setVisible(true);
-            }
+            RefreshSourceParams();
         }
     }
     else if (comboBoxThatHasChanged == &combo_room ||

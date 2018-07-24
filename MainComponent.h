@@ -45,7 +45,8 @@ struct PropagationSource
         SOURCE_FREQUENCY
     };
     SoundBuffer test_buffer;
-    std::shared_ptr<PropagationPlanner> planner;
+    std::shared_ptr<PropagationPlanner> planner;    
+    std::shared_ptr<MovingEmitter> moving_emitter;
     std::atomic<SourceType> source_type;
 };
 
@@ -118,8 +119,7 @@ public:
 private:
     //==============================================================================
     AudioSourcePlayer audioSourcePlayer;
-
-    std::unique_ptr<MovingEmitter> moving_emitter;
+    
     std::unique_ptr<std::mutex> mutex_emitter_update;
     std::array<std::unique_ptr<nDSP::Butterworth1Pole>, 2> atmospheric_filters;
     std::vector<std::shared_ptr<RoomGeometry>> rooms;
@@ -210,6 +210,9 @@ private:
         std::shared_ptr<RoomGeometry> room,
         const float _time, const float _zoom_factor, const bool _allow_timeout = false);
     void ExportAsImage(const File& file, const int width, const int height, const float _zoom_factor);
+
+    // UI Helpers
+    void RefreshSourceParams();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };

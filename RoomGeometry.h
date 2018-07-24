@@ -45,7 +45,22 @@ public:
     void SetRadius(const float& _radius)
     {
         radius.store(_radius);
-    }    
+    }
+
+    float GetFrequency() const
+    {
+        return frequency.load();
+    }
+
+    float GetGlobalGain() const
+    {
+        return global_gain.load();
+    }
+
+    float SetRadius() const
+    {
+        return radius.load();
+    }
 
     void ComputeGain(const float new_gain);
 

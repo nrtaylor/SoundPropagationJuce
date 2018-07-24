@@ -12,15 +12,12 @@
 
 class MovingEmitter;
 class RoomGeometry;
-struct PropagationResult;
 class PropagationPlanner;
-class PlannerAStar;
-class PlannerWave;
+struct PropagationResult;
 namespace nDSP
 {
     struct Butterworth1Pole;
 }
-
 namespace SoundPropagation
 {
     enum MethodType : int32;
@@ -80,8 +77,7 @@ struct PlannerToResult
 class MainComponent   : public OpenGLAppComponent,
                         public AudioSource,
                         public Slider::Listener,
-                        public ComboBox::Listener,
-                        public ToggleButton::Listener,
+                        public ComboBox::Listener,                        
                         private Timer
 {
 public:
@@ -118,7 +114,6 @@ public:
     // GUI
     void sliderValueChanged(Slider* slider) override;
     void comboBoxChanged(ComboBox* comboBoxThatHasChanged) override;
-    void buttonClicked(Button* buttonClicked) override;
 
 private:
     //==============================================================================
@@ -208,6 +203,7 @@ private:
 
     void PaintEmitter(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const;
     void PaintRoom(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const;
+    void PaintSimulation(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor);
 
     void GenerateSPLImage(Image& _image,
         std::shared_ptr<PropagationPlanner> planner, 

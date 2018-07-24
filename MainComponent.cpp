@@ -16,11 +16,17 @@
 //#define PROFILE_SIMULATION
 
 namespace ImageHelper
-{   
+{
     Image SquareImage(const Rectangle<int>& bounds)
     {
-        const int extent = jmin(bounds.getWidth(), bounds.getHeight());
+        const int extent = nMath::Min(bounds.getWidth(), bounds.getHeight());
         return Image(Image::ARGB, extent, extent, true);
+    }
+
+    nMath::Vector Center(const Rectangle<int>& bounds)
+    {
+        const float min_extent = (float)nMath::Min(bounds.getWidth(), bounds.getHeight());
+        return nMath::Vector { min_extent / 2.f, min_extent / 2.f, 0.f };
     }
 }
 
@@ -145,7 +151,7 @@ MainComponent::MainComponent() :
     addAndMakeVisible(&slider_freq);
     slider_freq.setRange(0, 8.0, 0.001);
     slider_freq.setTextValueSuffix(" Hz");
-    slider_freq.setValue(0.2);
+    slider_freq.setValue(0.08);
     slider_freq.setSkewFactorFromMidPoint(1.0);
     slider_freq.addListener(this);
 
@@ -165,27 +171,30 @@ MainComponent::MainComponent() :
 
     addAndMakeVisible(&button_show_spl);
     button_show_spl.setButtonText("Draw SPL");
-    button_show_spl.addListener(this);
-    button_show_spl.onClick = [this]() { show_spl = button_show_spl.getToggleState(); };
+    button_show_spl.onClick = [this]() 
+    { 
+        const bool next_show_spl = button_show_spl.getToggleState();
+        button_show_contours.setEnabled(next_show_spl);
+        button_gamma_correct.setEnabled(next_show_spl);
+        show_spl = next_show_spl;
+    };
 
     addAndMakeVisible(&button_show_ray_casts);
     button_show_ray_casts.setButtonText("Ray Casts");
-    button_show_ray_casts.addListener(this);
     button_show_ray_casts.onClick = [this]() { show_ray_casts = button_show_ray_casts.getToggleState(); };
 
     addAndMakeVisible(&button_show_grid);
     button_show_grid.setButtonText("Draw Grid");
-    button_show_grid.addListener(this);
     button_show_grid.onClick = [this]() { show_grid = button_show_grid.getToggleState(); };
 
     addAndMakeVisible(&button_show_contours);
-    button_show_contours.setButtonText("Contours");
-    button_show_contours.addListener(this);
+    button_show_contours.setButtonText("Contours");    
+    button_show_contours.setEnabled(false);
     button_show_contours.onClick = [this]() { show_contours = button_show_contours.getToggleState(); };
 
     addAndMakeVisible(&button_gamma_correct);
     button_gamma_correct.setButtonText("Gamma");
-    button_gamma_correct.addListener(this);
+    button_gamma_correct.setEnabled(false);
     button_gamma_correct.onClick = [this]() { flag_gamma_correct = button_gamma_correct.getToggleState(); };
     
     addAndMakeVisible(&slider_spl_freq);
@@ -305,6 +314,16 @@ MainComponent::MainComponent() :
         room->AddWall({ -20.f, -16.f, 0.f }, { -20.f,  16.f, 0.f });
         rooms.emplace_back(room);
         combo_room.addItem("Rect Bigger", static_cast<int>(rooms.size()));
+    }
+    // Rect Long
+    {
+        std::shared_ptr<RoomGeometry> room = std::make_shared<RoomGeometry>(RoomGeometry());
+        room->AddWall({ -24.f,  11.25f, 0.f }, { 24.f,  11.25f, 0.f });
+        room->AddWall({ 24.f,  11.25f, 0.f }, { 24.f, -11.25f, 0.f });
+        room->AddWall({ 24.f, -11.25f, 0.f }, { -24.f, -11.25f, 0.f });
+        room->AddWall({ -24.f, -11.25f, 0.f }, { -24.f,  11.25f, 0.f });
+        rooms.emplace_back(room);
+        combo_room.addItem("Rect Long", static_cast<int>(rooms.size()));
     }
     // Rect and Rect
     {
@@ -491,65 +510,13 @@ void MainComponent::paint (Graphics& _g)
     const Rectangle<int> bounds = _g.getClipBounds();
     const float zoom_factor = 10.f;
     PaintRoom(_g, bounds, zoom_factor);    
-
-    ReadWriteControl rw = RW_NONE;
-    const uint32 current_read_index = read_index;
-    if (simulation_results[current_read_index].lock.compare_exchange_strong(rw, RW_READING))
-    {        
-        if (show_ray_casts)
-        {
-            const PropagationResult& result = *simulation_results[current_read_index].object.result;
-            if (result.intersections.size() > 0)
-            {
-                const float min_extent = (float)std::min(bounds.getWidth(), bounds.getHeight());
-                const nMath::Vector center{ min_extent / 2.f, min_extent / 2.f, 0.f };
-                _g.setColour(Colour::fromRGB(0x0, 0xAA, 0xAA));
-                for (const nMath::LineSegment line : result.intersections)
-                {
-                    _g.drawLine((line.start.x * zoom_factor) + center.x,
-                        -(line.start.y * zoom_factor) + center.y,
-                        (line.end.x * zoom_factor) + center.x,
-                        -(line.end.y * zoom_factor) + center.y);
-                }
-            }
-        }
-        if (show_grid)
-        {
-            std::shared_ptr<const PropagationPlanner> planner = simulation_results[current_read_index].object.planner;
-            if (std::shared_ptr<const PlannerAStar> astar_planner
-                = std::dynamic_pointer_cast<const PlannerAStar>(planner))
-            {
-                const PlannerAStar::GeometryGrid& grid = astar_planner->Grid();
-                const float min_extent = (float)std::min(bounds.getWidth(), bounds.getHeight());
-                _g.setColour(Colour::fromRGBA(0x77, 0x77, 0x77, 0x99));
-                const int offset = (int)(min_extent / 2.f - zoom_factor * PlannerAStar::GridDistance / 2);
-                const int cellSize = (int)zoom_factor / PlannerAStar::GridCellsPerMeter;
-                for (int i = 0; i < PlannerAStar::GridResolution; ++i)
-                {
-                    for (int j = 0; j < PlannerAStar::GridResolution; ++j)
-                    {
-                        if (bool value = grid[i][j])
-                        {
-                            _g.fillRect(
-                                cellSize * j + offset,
-                                cellSize * (PlannerAStar::GridResolution - i - 1) + offset,
-                                cellSize - 1,
-                                cellSize - 1);
-                        }
-                    }
-                }
-            }
-        }
-        simulation_results[current_read_index].lock = RW_NONE;
-    }
-
+    PaintSimulation(_g, bounds, zoom_factor);
     PaintEmitter(_g, bounds, zoom_factor);
 }
 
 void MainComponent::PaintEmitter(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const
 {
-    const float min_extent = (float)std::min(_bounds.getWidth(), _bounds.getHeight());
-    const nMath::Vector center{ min_extent / 2.f, min_extent / 2.f, 0.f };
+    const nMath::Vector center = ImageHelper::Center(_bounds);
 
     _g.setColour(Colour::fromRGB(0xFF, 0xFF, 0xFF));
     _g.fillEllipse(receiver_x - 1.f, receiver_y - 1.f, 2, 2);
@@ -568,8 +535,7 @@ void MainComponent::PaintRoom(Graphics& _g, const Rectangle<int> _bounds, const 
     std::shared_ptr<RoomGeometry> room = current_room;
     if (room != nullptr)
     {
-        const float min_extent = (float)std::min(_bounds.getWidth(), _bounds.getHeight());
-        const nMath::Vector center{ min_extent / 2.f, min_extent / 2.f, 0.f };
+        const nMath::Vector center = ImageHelper::Center(_bounds);
 
         _g.setColour(Colour::fromRGB(0x77, 0x1c, 0x47));
         Path room_lines;
@@ -584,31 +550,59 @@ void MainComponent::PaintRoom(Graphics& _g, const Rectangle<int> _bounds, const 
             room_lines.addLineSegment(drawLine, 2.f);
         }
         _g.fillPath(room_lines);
+    }
+}
 
-        //if (show_grid.load())
-        //{
-        //    const std::unique_ptr<RoomGeometry::GeometryGrid>& grid = room->Grid();
-        //    if (grid != nullptr)
-        //    {
-        //        _g.setColour(Colour::fromRGBA(0x77, 0x77, 0x77, 0x99));
-        //        int offset = (int)(min_extent / 2.f - _zoom_factor * RoomGeometry::GridDistance / 2);
-        //        int cellSize = 10 / RoomGeometry::GridCellsPerMeter;
-        //        for (int i = 0; i < RoomGeometry::GridResolution; ++i)
-        //        {
-        //            for (int j = 0; j < RoomGeometry::GridResolution; ++j)
-        //            {
-        //                if (bool value = (*grid)[i][j])
-        //                {
-        //                    _g.fillRect(
-        //                        cellSize * j + offset + 1,
-        //                        cellSize * (RoomGeometry::GridResolution - i - 1) + offset - 1,
-        //                        cellSize - 1,
-        //                        cellSize - 1);
-        //                }
-        //            }
-        //        }
-        //    }
-        //}
+void MainComponent::PaintSimulation(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor)
+{
+    ReadWriteControl rw = RW_NONE;
+    const uint32 current_read_index = read_index;
+    if (simulation_results[current_read_index].lock.compare_exchange_strong(rw, RW_READING))
+    {
+        if (show_ray_casts)
+        {
+            const PropagationResult& result = *simulation_results[current_read_index].object.result;
+            if (result.intersections.size() > 0)
+            {
+                const nMath::Vector center = ImageHelper::Center(_bounds);
+                _g.setColour(Colour::fromRGB(0x0, 0xAA, 0xAA));
+                for (const nMath::LineSegment line : result.intersections)
+                {
+                    _g.drawLine((line.start.x * _zoom_factor) + center.x,
+                        -(line.start.y * _zoom_factor) + center.y,
+                        (line.end.x * _zoom_factor) + center.x,
+                        -(line.end.y * _zoom_factor) + center.y);
+                }
+            }
+        }
+        if (show_grid)
+        {
+            std::shared_ptr<const PropagationPlanner> planner = simulation_results[current_read_index].object.planner;
+            if (std::shared_ptr<const PlannerAStar> astar_planner
+                = std::dynamic_pointer_cast<const PlannerAStar>(planner)) // TODO: planner should know its type.
+            {
+                const PlannerAStar::GeometryGrid& grid = astar_planner->Grid(); // TODO: handle PlannerTwoStages
+                const float min_extent = (float)nMath::Min(_bounds.getWidth(), _bounds.getHeight());
+                _g.setColour(Colour::fromRGBA(0x77, 0x77, 0x77, 0x99));
+                const int offset = (int)(min_extent / 2.f - _zoom_factor * PlannerAStar::GridDistance / 2);
+                const int cellSize = (int)_zoom_factor / PlannerAStar::GridCellsPerMeter;
+                for (int i = 0; i < PlannerAStar::GridResolution; ++i)
+                {
+                    for (int j = 0; j < PlannerAStar::GridResolution; ++j)
+                    {
+                        if (bool value = grid[i][j])
+                        {
+                            _g.fillRect(
+                                cellSize * j + offset,
+                                cellSize * (PlannerAStar::GridResolution - i - 1) + offset,
+                                cellSize - 1,
+                                cellSize - 1);
+                        }
+                    }
+                }
+            }
+        }
+        simulation_results[current_read_index].lock = RW_NONE;
     }
 }
 
@@ -732,7 +726,7 @@ void MainComponent::releaseResources()
 
 void MainComponent::mouseDown(const MouseEvent& event)
 {
-    const float min_extent = (float)std::min(getBounds().getWidth(), getBounds().getHeight());
+    const float min_extent = (float)nMath::Min(getBounds().getWidth(), getBounds().getHeight());
     if (event.getMouseDownX() < min_extent &&
         event.getMouseDownY() < min_extent)
     {
@@ -933,8 +927,7 @@ void MainComponent::update()
     const float time_now = (float)(Time::currentTimeMillis() % ((1 + (int)test_frequency) * 1000));// TODO: start at t = 0 or store in planner.
     if (room != nullptr)
     {
-        const float min_extent = (float)std::min(getBounds().getWidth(), getBounds().getHeight());
-        const nMath::Vector center{ min_extent / 2.f, min_extent / 2.f, 0.f };
+        const nMath::Vector center = ImageHelper::Center(getBounds());
         const float inv_zoom_factor = 1.f/10.f;
         const nMath::Vector receiever_pos = { (receiver_x - center.x) * inv_zoom_factor , (receiver_y - center.y) * -inv_zoom_factor, 0.f};
 
@@ -1050,11 +1043,6 @@ void MainComponent::sliderValueChanged(Slider* slider)
     }
 }
 
-void MainComponent::buttonClicked(Button* buttonClicked)
-{
-    (void)buttonClicked;
-}
-
 void MainComponent::comboBoxChanged(ComboBox* comboBoxThatHasChanged)
 {
     if (comboBoxThatHasChanged == &combo_selected_sound)
@@ -1088,6 +1076,20 @@ void MainComponent::comboBoxChanged(ComboBox* comboBoxThatHasChanged)
         }
         current_method = static_cast<SoundPropagation::MethodType>(combo_method.getSelectedId());        
         sources[selected_source].planner = PropagationPlanner::MakePlanner(current_method);
+        switch (current_method)
+        {
+        case SoundPropagation::Method_SpecularLOS:
+        case SoundPropagation::Method_RayCasts:
+        case SoundPropagation::Method_Wave:
+            button_show_grid.setEnabled(false);
+            break;
+        case SoundPropagation::Method_Pathfinding:
+        case SoundPropagation::Method_LOSAStarFallback:
+            button_show_grid.setEnabled(true);
+            break;
+        default:
+            break;
+        }
         planners_refresh = true;
     }
 }

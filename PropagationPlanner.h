@@ -24,6 +24,7 @@ namespace SoundPropagation
     enum ResultConfig
     {
         PRD_GAIN,
+        PRD_REFLECTIONS_ONLY,
         PRD_FULL,
     };
 }

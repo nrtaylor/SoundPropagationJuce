@@ -170,25 +170,69 @@ void PlannerWave::Simulate(PropagationResult& result, const nMath::Vector& _rece
         return;
     }
 
-    const float distance = nMath::Length(_receiver - source);
-    const float angle = 2.f * (float)M_PI * frequency;
-    //const float shift = angle * -distance / 340.f;
-    const float geometric_attenuation = nMath::Min(1.f, 1.f / distance);
-    //float value = geometric_attenuation * (1.f + 0.5f * cosf(angle * (_time_ms * time_factor / 1000.f) + shift)); // TODO: Normalization on gfx side
-    float value = geometric_attenuation * (0.5f + 0.5f * cosf(angle * (_time_ms * time_factor / 1000.f - distance / 340.f)));
+    const static float inv_speed = 1 / 340.f;
 
+    float value = 0;
+    const float distance = nMath::Length(_receiver - source);
+    const float angle = 2.f * (float)M_PI * frequency; // omega
+    const float time_scaled = _time_ms * time_factor / 1000.f;
+
+    if (result.config != SoundPropagation::PRD_REFLECTIONS_ONLY)
+    {
+        const float geometric_attenuation = nMath::Min(1.f, 1.f / distance);
+        //const float shift = angle * distance / 340.f; // k * distance
+        //float value = ga * cosf(shift - angle * _time_ms)); 
+        value = geometric_attenuation + geometric_attenuation * cosf(angle * (distance * inv_speed - time_scaled)); // TODO: Normalization on gfx side
+        //value = geometric_attenuation * cosf(angle * (distance * inv_speed - time_scaled)); // TODO: Normalization on gfx side
+    }
     for (const nMath::Vector& v : first_reflections)
     {
         const float first_distance = nMath::Length(_receiver - v);
-        //const float first_shift = angle * -(first_distance) / 340.f;
-        const float first_geometric_attenuation = nMath::Min(1.f, 1.f / (first_distance + distance));
-        //float first_value = first_geometric_attenuation * (1.f + 0.5f * sinf(angle * (_time_ms * time_factor / 1000.f) + first_shift)); // TODO: Normalization on gfx side
-        float first_value = first_geometric_attenuation * (0.5f + 0.5f * sinf(angle * (_time_ms * time_factor / 1000.f - first_distance / 340.f))); // TODO: Normalization on gfx side
+        const float reflect_phase = nMath::Length(source - v);
+        //const float first_geometric_attenuation = nMath::Min(1.f, 1.f / (first_distance));
+        const float first_geometric_attenuation = nMath::Min(1.f, 1.f / (first_distance + reflect_phase));
+        //float first_value = ga_f * cosf(pi/2 + first_shift - angle * _time_ms);
+        float first_value = first_geometric_attenuation + first_geometric_attenuation * sinf(angle * ((first_distance + reflect_phase) * inv_speed - time_scaled)); // TODO: Normalization on gfx side
+        //float first_value = first_geometric_attenuation * cosf(angle * (first_distance * inv_speed - time_scaled)); // TODO: Normalization on gfx side
         value += first_value;
     }
 
+    // time independent
+    if (result.config == SoundPropagation::PRD_REFLECTIONS_ONLY)
+    {
+        float real_sum = 0.f;
+        float im_sum = 0.f;
+
+        const float theta = angle * inv_speed * distance;
+        const float geometric_attenuation = nMath::Min(1.f, 1.f / distance);
+        real_sum += cosf(theta) * geometric_attenuation;
+        im_sum += sinf(theta) * geometric_attenuation;
+
+        for (const nMath::Vector& v : first_reflections)
+        {
+            const float first_distance = nMath::Length(_receiver - v);
+            const float first_geometric_attenuation = nMath::Min(1.f, 1.f / (first_distance + distance));
+            const float first_theta = angle * inv_speed * first_distance;
+
+            real_sum += cosf(first_theta) * first_geometric_attenuation;
+            im_sum += sinf(first_theta) * first_geometric_attenuation;
+        }
+        
+        float amplitude = sqrtf(real_sum * real_sum + im_sum * im_sum);
+        float phase = atan2f(im_sum, real_sum);
+        float gain2 = cosf(phase - angle * time_scaled) * amplitude + amplitude;
+        float volume_threshold_96db = 1.58489319e-5f * (1.f + (float)first_reflections.size()) * 2.f;
+        if ((fabsf(gain2) > volume_threshold_96db || fabsf(value) > volume_threshold_96db) &&
+            fabsf(20.f*log10f(gain2) - 20.f*log10f(value)) > 0.5f)
+        {
+            result.gain = 0.9f * 0.5f * gain2;
+            return;
+        }
+    }
+
+    const float normalize = 0.5f;
     const float gain = 0.9f;
-    result.gain = value * gain;
+    result.gain = normalize * gain * value;
 }
 
 template<class PlannerPrimary, class PlannerSecondary>

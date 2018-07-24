@@ -184,20 +184,42 @@ float PlannerAStar::FindAStarDiscrete(PropagationResult& result, const Coord& re
         if (result.config == SoundPropagation::PRD_FULL)
         {
             result.intersections.clear();
+            cache->grid_score = nullptr;
         }
         cache->grid_result[receiver_coord.row][receiver_coord.col] = 0.f;
         return 0.f;
     }
 
-    auto heuristic = [&receiver_coord](const Coord& c)
+    // Verion 1: distance based
+    //auto heuristic = [&receiver_coord](const Coord& c)
+    //{
+    //    const float distance = sqrtf((float)((c.col - receiver_coord.col)*(c.col - receiver_coord.col) +
+    //        (c.row - receiver_coord.row)*(c.row - receiver_coord.row)));
+    //    return (uint32_t)(distance * 1000.f);
+    //};
+
+    // Version 2: moving "behind" the source is penalized more. Penalization is somewhat arbitrary.
+    const Coord source_dir = { receiver_coord.row - source_coord.row, receiver_coord.col - source_coord.col };
+    auto heuristic = [&receiver_coord, &source_dir, this](const Coord& c)
     {
-        return (uint32_t)(sqrtf((float)((c.col - receiver_coord.col)*(c.col - receiver_coord.col) +
-            (c.row - receiver_coord.row)*(c.row - receiver_coord.row))) * 1000.f);
+        const Coord direction = { c.row - receiver_coord.row, c.col - receiver_coord.col };
+        const float distance = sqrtf((float)direction.col * direction.col + direction.row * direction.row);
+
+        const Coord from_source = { c.row - source_coord.row, c.col - source_coord.col };
+        const float dot = (float)(from_source.row * source_dir.row + from_source.col * source_dir.col);
+        if (dot >= 0.f)
+        {
+            return (uint32_t)(distance * 1000.f);
+        }
+        else
+        {
+            return (uint32_t)((distance + sqrt(-dot)) * 1000.f);
+        }
     };
 
-    GeometryGridScore heap_score;
+    GeometryGridScore grid_nodes;
     const GridNode empty_node{ INT_MAX, -1, GNS_NOT_FOUND };
-    std::fill_n(&heap_score[0][0], GridResolution * GridResolution, empty_node);
+    std::fill_n(&grid_nodes[0][0], GridResolution * GridResolution, empty_node);
     typedef std::pair<uint32_t, Coord> ScoredCoord;
     auto compareScore = [](const ScoredCoord& lhs, const ScoredCoord& rhs)
     {
@@ -210,7 +232,7 @@ float PlannerAStar::FindAStarDiscrete(PropagationResult& result, const Coord& re
     prediction.Push(ScoredCoord(ideal_distance, source_coord));
 
     // Start
-    heap_score[source_coord.row][source_coord.col] = GridNode{ 0, -1, GNS_FOUND };
+    grid_nodes[source_coord.row][source_coord.col] = GridNode{ 0, -1, GNS_FOUND };
 
     static Coord neighbors[] = {
         { -1, -1 },
@@ -230,7 +252,7 @@ float PlannerAStar::FindAStarDiscrete(PropagationResult& result, const Coord& re
     while (num_discovered)
     {
         Coord next_coord = prediction.Top().second;
-        GridNode& node = heap_score[next_coord.row][next_coord.col];
+        GridNode& node = grid_nodes[next_coord.row][next_coord.col];
         if (node.state == GNS_CHECKED)
         {
             prediction.Pop();
@@ -249,6 +271,7 @@ float PlannerAStar::FindAStarDiscrete(PropagationResult& result, const Coord& re
             if (result.config == SoundPropagation::PRD_FULL)
             {
                 result.intersections.clear();
+                cache->grid_score = std::make_shared<GeometryGridScore>(grid_nodes);
             }
             return 0.f;
         }
@@ -265,7 +288,7 @@ float PlannerAStar::FindAStarDiscrete(PropagationResult& result, const Coord& re
             if (neighbor.row >= 0 && neighbor.row < GridResolution &&
                 neighbor.col >= 0 && neighbor.col < GridResolution)
             {
-                GridNode& neighbor_info = heap_score[neighbor.row][neighbor.col];
+                GridNode& neighbor_info = grid_nodes[neighbor.row][neighbor.col];
                 if (grid[neighbor.row][neighbor.col])
                 {
                     continue; // not a neighbor; wall
@@ -283,11 +306,16 @@ float PlannerAStar::FindAStarDiscrete(PropagationResult& result, const Coord& re
                         ++num_discovered;
                     }
 
-                    heap_score[neighbor.row][neighbor.col] = GridNode{ neighbor_score, (int8_t)i, GNS_FOUND };
+                    grid_nodes[neighbor.row][neighbor.col] = GridNode{ neighbor_score, (int8_t)i, GNS_FOUND };
                     prediction.Push(ScoredCoord{ neighbor_score + heuristic(neighbor), neighbor });
                 }
             }
         }
+    }
+
+    if (result.config == SoundPropagation::PRD_FULL)
+    {
+        cache->grid_score = std::make_shared<GeometryGridScore>(grid_nodes);
     }
 
     if (prediction.Empty())
@@ -301,7 +329,7 @@ float PlannerAStar::FindAStarDiscrete(PropagationResult& result, const Coord& re
     }
 
     Coord next_coord = prediction.Top().second;
-    const float distance = nMath::Max(FLT_EPSILON, heap_score[next_coord.row][next_coord.col].score / (1000.f * GridCellsPerMeter));
+    const float distance = nMath::Max(FLT_EPSILON, grid_nodes[next_coord.row][next_coord.col].score / (1000.f * GridCellsPerMeter));
     const float geometric_attenuation = nMath::Min(1.f, 1.f / distance);
 
     cache->grid_result[receiver_coord.row][receiver_coord.col] = geometric_attenuation;
@@ -312,9 +340,9 @@ float PlannerAStar::FindAStarDiscrete(PropagationResult& result, const Coord& re
 
         const int grid_half = (int)GridResolution / 2;
         Coord coord = next_coord;
-        while (heap_score[coord.row][coord.col].link_index >= 0)
+        while (grid_nodes[coord.row][coord.col].link_index >= 0)
         {
-            GridNode& coord_info = heap_score[coord.row][coord.col];
+            GridNode& coord_info = grid_nodes[coord.row][coord.col];
             Coord incoming_coord = coord;
             incoming_coord.row -= neighbors[coord_info.link_index].row;
             incoming_coord.col -= neighbors[coord_info.link_index].col;
@@ -421,4 +449,14 @@ void PlannerAStar::Simulate(PropagationResult& result, const nMath::Vector& _rec
     }
 
     result.gain = sum;
+}
+
+bool PlannerAStar::GridNodeSearched(std::shared_ptr<const PropagationSimulationCache> cache, int row, int col)
+{
+    if (std::shared_ptr<const AStarSimulateCache> astar_cache = std::dynamic_pointer_cast<const AStarSimulateCache>(cache))
+    {
+        return astar_cache->grid_score != nullptr &&
+               (*astar_cache->grid_score)[row][col].state == GNS_CHECKED;
+    }
+    return false;
 }

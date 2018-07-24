@@ -587,11 +587,20 @@ void MainComponent::PaintSimulation(Graphics& _g, const Rectangle<int> _bounds, 
         }
         if (show_grid)
         {
+            const PropagationResult& result = *simulation_results[current_read_index].object.result;
             std::shared_ptr<const PropagationPlanner> planner = simulation_results[current_read_index].object.planner;
-            if (std::shared_ptr<const PlannerAStar> astar_planner
-                = std::dynamic_pointer_cast<const PlannerAStar>(planner)) // TODO: planner should know its type.
+            std::shared_ptr<const PlannerAStar> astar_planner = std::dynamic_pointer_cast<const PlannerAStar>(planner);
+            if (astar_planner == nullptr)
             {
-                const PlannerAStar::GeometryGrid& grid = astar_planner->Grid(); // TODO: handle PlannerTwoStages
+                if (std::shared_ptr<const PlannerTwoStages<PlannerSpecularLOS, PlannerAStar> > planner_two =
+                    std::dynamic_pointer_cast<const PlannerTwoStages<PlannerSpecularLOS, PlannerAStar>>(planner))
+                {
+                    astar_planner = planner_two->Secondary();
+                }
+            }
+            if (astar_planner != nullptr) // TODO: planner should know its type.
+            {
+                const PlannerAStar::GeometryGrid& grid = astar_planner->Grid();
                 const float min_extent = (float)nMath::Min(_bounds.getWidth(), _bounds.getHeight());
                 _g.setColour(Colour::fromRGBA(0x77, 0x77, 0x77, 0x99));
                 const int offset = (int)(min_extent / 2.f - _zoom_factor * PlannerAStar::GridDistance / 2);
@@ -600,13 +609,21 @@ void MainComponent::PaintSimulation(Graphics& _g, const Rectangle<int> _bounds, 
                 {
                     for (int j = 0; j < PlannerAStar::GridResolution; ++j)
                     {
-                        if (bool value = grid[i][j])
+                        if (grid[i][j])
                         {
                             _g.fillRect(
                                 cellSize * j + offset,
                                 cellSize * (PlannerAStar::GridResolution - i - 1) + offset,
                                 cellSize - 1,
                                 cellSize - 1);
+                        }
+                        if (PlannerAStar::GridNodeSearched(result.cache, i, j))
+                        {
+                            _g.drawLine(
+                                (float)(cellSize * j + offset),
+                                (float)(cellSize * (PlannerAStar::GridResolution - i - 1) + offset),
+                                (float)(cellSize * (j + 1) + offset),
+                                (float)(cellSize * (PlannerAStar::GridResolution - (i + 1) - 1) + offset));
                         }
                     }
                 }

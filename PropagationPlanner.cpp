@@ -172,16 +172,18 @@ void PlannerWave::Simulate(PropagationResult& result, const nMath::Vector& _rece
 
     const float distance = nMath::Length(_receiver - source);
     const float angle = 2.f * (float)M_PI * frequency;
-    const float shift = angle * -distance / 340.f;
+    //const float shift = angle * -distance / 340.f;
     const float geometric_attenuation = nMath::Min(1.f, 1.f / distance);
-    float value = geometric_attenuation * (1.f + 0.5f * cosf(angle * (_time_ms * time_factor / 1000.f) + shift)); // TODO: Normalization on gfx side
+    //float value = geometric_attenuation * (1.f + 0.5f * cosf(angle * (_time_ms * time_factor / 1000.f) + shift)); // TODO: Normalization on gfx side
+    float value = geometric_attenuation * (0.5f + 0.5f * cosf(angle * (_time_ms * time_factor / 1000.f - distance / 340.f)));
 
     for (const nMath::Vector& v : first_reflections)
     {
         const float first_distance = nMath::Length(_receiver - v);
-        const float first_shift = angle * -(first_distance) / 340.f;
+        //const float first_shift = angle * -(first_distance) / 340.f;
         const float first_geometric_attenuation = nMath::Min(1.f, 1.f / (first_distance + distance));
-        float first_value = first_geometric_attenuation * (1.f + 0.5f * sinf(angle * (_time_ms * time_factor / 1000.f) + first_shift)); // TODO: Normalization on gfx side
+        //float first_value = first_geometric_attenuation * (1.f + 0.5f * sinf(angle * (_time_ms * time_factor / 1000.f) + first_shift)); // TODO: Normalization on gfx side
+        float first_value = first_geometric_attenuation * (0.5f + 0.5f * sinf(angle * (_time_ms * time_factor / 1000.f - first_distance / 340.f))); // TODO: Normalization on gfx side
         value += first_value;
     }
 
@@ -192,8 +194,8 @@ void PlannerWave::Simulate(PropagationResult& result, const nMath::Vector& _rece
 template<class PlannerPrimary, class PlannerSecondary>
 PlannerTwoStages<PlannerPrimary, PlannerSecondary>::PlannerTwoStages()
 {
-    planner_primary = std::make_unique<PlannerPrimary>();
-    planner_secondary = std::make_unique<PlannerSecondary>();
+    planner_primary = std::make_shared<PlannerPrimary>();
+    planner_secondary = std::make_shared<PlannerSecondary>();
 }
 
 template<class PlannerPrimary, class PlannerSecondary>

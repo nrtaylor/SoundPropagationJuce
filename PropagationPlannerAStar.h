@@ -38,6 +38,7 @@ private:
     struct AStarSimulateCache : public PropagationSimulationCache
     {
         GeometryGridCache grid_result;
+        std::shared_ptr<GeometryGridScore> grid_score;
     };
 
 public:
@@ -45,6 +46,8 @@ public:
     void Preprocess(std::shared_ptr<const RoomGeometry> _room) override;
     void Plan(const PropagationPlanner::SourceConfig& _config) override;
     void Simulate(PropagationResult& result, const nMath::Vector& _receiver, const float _time_ms) const override;
+
+    static bool GridNodeSearched(std::shared_ptr<const PropagationSimulationCache> cache, int row, int col);
 
     const GeometryGrid& Grid() const
     {

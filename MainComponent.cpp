@@ -187,7 +187,7 @@ MainComponent::MainComponent() :
         const bool next_show_spl = button_show_spl.getToggleState();
         button_show_contours.setEnabled(next_show_spl);
         button_gamma_correct.setEnabled(next_show_spl);
-        button_show_crests_only.setEnabled(next_show_spl);
+        button_show_crests_only.setEnabled(next_show_spl && current_method == SoundPropagation::Method_Wave);
         show_spl = next_show_spl;
     };
 
@@ -1138,12 +1138,13 @@ void MainComponent::comboBoxChanged(ComboBox* comboBoxThatHasChanged)
         }
         current_method = static_cast<SoundPropagation::MethodType>(combo_method.getSelectedId());        
         sources[selected_source].planner = PropagationPlanner::MakePlanner(current_method);
+
+        button_show_grid.setEnabled(false);
+        button_show_crests_only.setEnabled(false);
         switch (current_method)
         {
-        case SoundPropagation::Method_SpecularLOS:
-        case SoundPropagation::Method_RayCasts:
         case SoundPropagation::Method_Wave:
-            button_show_grid.setEnabled(false);
+            button_show_crests_only.setEnabled(true);
             break;
         case SoundPropagation::Method_Pathfinding:
         case SoundPropagation::Method_LOSAStarFallback:

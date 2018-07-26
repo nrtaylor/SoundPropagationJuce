@@ -72,6 +72,7 @@ MainComponent::MainComponent() :
     show_ray_casts = false;
     show_grid = false;
     show_contours = false;
+    show_crests_only = false;
     flag_refresh_image = false;
     flag_update_working = false;
     flag_gamma_correct = false;
@@ -186,6 +187,7 @@ MainComponent::MainComponent() :
         const bool next_show_spl = button_show_spl.getToggleState();
         button_show_contours.setEnabled(next_show_spl);
         button_gamma_correct.setEnabled(next_show_spl);
+        button_show_crests_only.setEnabled(next_show_spl);
         show_spl = next_show_spl;
     };
 
@@ -201,6 +203,11 @@ MainComponent::MainComponent() :
     button_show_contours.setButtonText("Contours");    
     button_show_contours.setEnabled(false);
     button_show_contours.onClick = [this]() { show_contours = button_show_contours.getToggleState(); };
+
+    addAndMakeVisible(&button_show_crests_only);
+    button_show_crests_only.setButtonText("Crests");
+    button_show_crests_only.setEnabled(false);
+    button_show_crests_only.onClick = [this]() { show_crests_only = button_show_crests_only.getToggleState(); };
 
     addAndMakeVisible(&button_gamma_correct);
     button_gamma_correct.setButtonText("Gamma");
@@ -728,7 +735,8 @@ void MainComponent::resized()
 
     frame_button_l = frame_next();
     frame_button_r = frame_button_l.removeFromRight(frame_button_l.getWidth() / 2);
-    button_gamma_correct.setBounds(frame_button_r);
+    button_gamma_correct.setBounds(frame_button_l);
+    button_show_crests_only.setBounds(frame_button_r);
 
     slider_time_scale.setBounds(frame_next());
 
@@ -854,6 +862,7 @@ void MainComponent::GenerateSPLImage(Image& _image,
     const float inv_zoom_factor = 1.f / (_zoom_factor * 10.f);
 
     const bool overlay_contours = show_contours.load();
+    const bool filter_crests = show_crests_only.load();
     const bool gamma_correct = flag_gamma_correct.load();
     const int extent = _image.getWidth();
     const Image::BitmapData bitmap(_image, Image::BitmapData::writeOnly);
@@ -891,6 +900,11 @@ void MainComponent::GenerateSPLImage(Image& _image,
                 0.f };
             planner->Simulate(result, pixel_to_world, _time);
             float energy = result.gain;
+            if (filter_crests &&
+                result.absolute < 0.92f)
+            {
+                energy = 0.f;
+            }
             int contour_color = -1;
 
             if (overlay_contours)

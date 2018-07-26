@@ -159,6 +159,7 @@ private:
     std::atomic_bool show_ray_casts;
     std::atomic_bool show_grid;
     std::atomic_bool show_contours;
+    std::atomic_bool show_crests_only;
     std::mutex mutex_image;
     std::atomic_bool flag_refresh_image;
     std::atomic_bool flag_update_working;
@@ -174,6 +175,7 @@ private:
     ToggleButton button_show_ray_casts;
     ToggleButton button_show_grid;
     ToggleButton button_show_contours;
+    ToggleButton button_show_crests_only;
     ToggleButton button_gamma_correct;
 
     TextButton button_source[3];

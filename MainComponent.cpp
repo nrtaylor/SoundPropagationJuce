@@ -120,7 +120,7 @@ MainComponent::MainComponent() :
         sources[i].moving_emitter->SetGlobalGain((float)default_emitter_gain);
         sources[i].moving_emitter->SetFrequency((float)default_emitter_freq);
         sources[i].moving_emitter->SetRadius((float)default_emitter_radius);
-        sources[i].source_type = PropagationSource::SOURCE_OFF;
+        sources[i].source_type = SoundPropagationSource::SOURCE_OFF;
     }
 
     button_loadfile.setButtonText("...");
@@ -299,8 +299,6 @@ MainComponent::MainComponent() :
     addAndMakeVisible(&combo_room);    
     combo_room.addListener(this);
 
-    planners_refresh = true;
-
     addAndMakeVisible(&label_selected_room);
     label_selected_room.setText("Room", dontSendNotification);
     label_selected_room.attachToComponent(&combo_room, true);
@@ -451,13 +449,13 @@ MainComponent::~MainComponent()
 //==============================================================================
 void MainComponent::initialise()
 {    
-    combo_selected_sound.addItem("File", PropagationSource::SOURCE_FILE);
-    combo_selected_sound.addItem("Frequency", PropagationSource::SOURCE_FREQUENCY);
-    combo_selected_sound.addItem("Off", PropagationSource::SOURCE_OFF);
+    combo_selected_sound.addItem("File", SoundPropagationSource::SOURCE_FILE);
+    combo_selected_sound.addItem("Frequency", SoundPropagationSource::SOURCE_FREQUENCY);
+    combo_selected_sound.addItem("Off", SoundPropagationSource::SOURCE_OFF);
 
     {
         MessageManagerLock lock;
-        combo_selected_sound.setSelectedId(PropagationSource::SOURCE_OFF);
+        combo_selected_sound.setSelectedId(SoundPropagationSource::SOURCE_OFF);
         combo_selected_sound.addListener(this);
 
         addAndMakeVisible(&label_selected_sound);
@@ -779,8 +777,8 @@ void MainComponent::getNextAudioBlock(const AudioSourceChannelInfo& bufferToFill
     }
 
     const int32 source_id = selected_source.load();
-    PropagationSource& source = sources[source_id];
-    if (source.source_type != PropagationSource::SOURCE_FILE)
+    SoundPropagationSource& source = sources[source_id];
+    if (source.source_type != SoundPropagationSource::SOURCE_FILE)
     {
         return;
     }
@@ -954,7 +952,7 @@ void MainComponent::GenerateSPLImage(Image& _image,
 void MainComponent::update()
 {
     int32 frame_time = Time::getMillisecondCounter();
-    PropagationSource& source = sources[selected_source];
+    SoundPropagationSource& source = sources[selected_source];
     std::shared_ptr<PropagationPlanner> planner = source.planner;
     std::shared_ptr<MovingEmitter> moving_emitter = source.moving_emitter;
 
@@ -1090,8 +1088,8 @@ void MainComponent::sliderValueChanged(Slider* slider)
 void MainComponent::RefreshSourceParams()
 {
     const int32 source_id = selected_source.load();
-    const PropagationSource& source = sources[source_id];
-    if (source.source_type == PropagationSource::SOURCE_FILE)
+    const SoundPropagationSource& source = sources[source_id];
+    if (source.source_type == SoundPropagationSource::SOURCE_FILE)
     {
         label_loadfile.setText(source.test_buffer.name, dontSendNotification);
 
@@ -1124,7 +1122,7 @@ void MainComponent::comboBoxChanged(ComboBox* comboBoxThatHasChanged)
         if (next_id > 0)
         {
             const int32 source_id = selected_source.load();
-            sources[source_id].source_type = (PropagationSource::SourceType)next_id;
+            sources[source_id].source_type = (SoundPropagationSource::SourceType)next_id;
             RefreshSourceParams();
         }
     }
@@ -1153,6 +1151,5 @@ void MainComponent::comboBoxChanged(ComboBox* comboBoxThatHasChanged)
         default:
             break;
         }
-        planners_refresh = true;
     }
 }

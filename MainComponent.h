@@ -23,33 +23,6 @@ namespace SoundPropagation
     enum MethodType : int32;
 }
 
-struct SoundBuffer
-{
-    SoundBuffer() :
-        index(0),
-        buffer(nullptr),
-        name("")
-    {}
-
-    String name;
-    std::shared_ptr<AudioSampleBuffer> buffer;
-    int32 index;
-};
-
-struct PropagationSource
-{
-    enum SourceType : int32
-    {
-        SOURCE_OFF = 1,
-        SOURCE_FILE,
-        SOURCE_FREQUENCY
-    };
-    SoundBuffer test_buffer;
-    std::shared_ptr<PropagationPlanner> planner;    
-    std::shared_ptr<MovingEmitter> moving_emitter;
-    std::atomic<SourceType> source_type;
-};
-
 enum ReadWriteControl : uint32
 {
     RW_NONE = 0x0,
@@ -68,6 +41,33 @@ struct PlannerToResult
 {
     std::shared_ptr<const PropagationPlanner> planner;
     std::unique_ptr<PropagationResult> result;
+};
+
+struct SoundBuffer
+{
+    SoundBuffer() :        
+        name(""),
+        buffer(nullptr),        
+        index(0)
+    {}
+
+    String name;
+    std::shared_ptr<AudioSampleBuffer> buffer;
+    int32 index;
+};
+
+struct SoundPropagationSource
+{
+    enum SourceType : int32
+    {
+        SOURCE_OFF = 1,
+        SOURCE_FILE,
+        SOURCE_FREQUENCY
+    };
+    SoundBuffer test_buffer;
+    std::shared_ptr<PropagationPlanner> planner;
+    std::shared_ptr<MovingEmitter> moving_emitter;
+    std::atomic<SourceType> source_type;
 };
 
 //==============================================================================
@@ -129,11 +129,10 @@ private:
     std::array<ReadWriteResult, 3> simulation_results;
     uint32 write_index;
     std::atomic_uint32_t read_index;
-    std::atomic<bool> planners_refresh;
     
     uint32 start_time;
 
-    std::array<PropagationSource, 3> sources;
+    std::array<SoundPropagationSource, 3> sources;
     std::atomic_int32_t selected_source;
 
     float sample_rate;
@@ -151,18 +150,19 @@ private:
     Label label_method;
 
     std::atomic<SoundPropagation::MethodType> current_method;
-    std::atomic<SoundPropagation::MethodType> current_compare_to_method;
 
     Image image_spl;
     Image image_next;
+    std::mutex mutex_image;
+    std::atomic_bool flag_refresh_image;
+    std::atomic_bool flag_update_working;
+
+    // Image options
     std::atomic_bool show_spl;
     std::atomic_bool show_ray_casts;
     std::atomic_bool show_grid;
     std::atomic_bool show_contours;
     std::atomic_bool show_crests_only;
-    std::mutex mutex_image;
-    std::atomic_bool flag_refresh_image;
-    std::atomic_bool flag_update_working;
     std::atomic_bool flag_gamma_correct;
 
     Slider slider_gain;

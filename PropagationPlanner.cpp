@@ -12,8 +12,8 @@ std::shared_ptr<PropagationPlanner> PropagationPlanner::MakePlanner(const SoundP
     std::shared_ptr<PropagationPlanner> planner = nullptr;
     switch (method)
     {
-    case SoundPropagation::Method_SpecularLOS:
-        planner = std::make_shared<PlannerSpecularLOS>();
+    case SoundPropagation::Method_DirectLOS:
+        planner = std::make_shared<PlannerDirectLOS>();
         break;
     case SoundPropagation::Method_RayCasts:
         planner = std::make_shared<PlannerRayCasts>();
@@ -25,7 +25,7 @@ std::shared_ptr<PropagationPlanner> PropagationPlanner::MakePlanner(const SoundP
         planner = std::make_shared<PlannerWave>();
         break;
     case SoundPropagation::Method_LOSAStarFallback:
-        planner = std::make_shared<PlannerTwoStages<PlannerSpecularLOS, PlannerAStar> >();
+        planner = std::make_shared<PlannerTwoStages<PlannerDirectLOS, PlannerAStar> >();
         break;
     default:
         break;
@@ -34,17 +34,17 @@ std::shared_ptr<PropagationPlanner> PropagationPlanner::MakePlanner(const SoundP
     return planner;
 }
 
-void PlannerSpecularLOS::Preprocess(std::shared_ptr<const RoomGeometry> _room)
+void PlannerDirectLOS::Preprocess(std::shared_ptr<const RoomGeometry> _room)
 {
     room = _room;
 }
 
-void PlannerSpecularLOS::Plan(const PropagationPlanner::SourceConfig& _config)
+void PlannerDirectLOS::Plan(const PropagationPlanner::SourceConfig& _config)
 {
     source = _config.source;
 }
 
-void PlannerSpecularLOS::Simulate(PropagationResult& result, const nMath::Vector& _receiver, const float _time_ms) const
+void PlannerDirectLOS::Simulate(PropagationResult& result, const nMath::Vector& _receiver, const float _time_ms) const
 {
     (void)_time_ms;
 

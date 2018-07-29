@@ -67,7 +67,7 @@ MainComponent::MainComponent() :
 {
     start_time = Time::getMillisecondCounter();
 
-    show_spl = false;
+    show_pressure = false;
     show_ray_casts = false;
     show_grid = false;
     show_contours = false;
@@ -114,7 +114,7 @@ MainComponent::MainComponent() :
         button_source[i].setClickingTogglesState(true);
         addAndMakeVisible(button_source[i]);
 
-        sources[i].planner.reset(new PlannerSpecularLOS());        
+        sources[i].planner.reset(new PlannerDirectLOS());        
         sources[i].moving_emitter = std::make_shared<MovingEmitter>();
         sources[i].moving_emitter->SetGlobalGain((float)default_emitter_gain);
         sources[i].moving_emitter->SetFrequency((float)default_emitter_freq);
@@ -179,19 +179,21 @@ MainComponent::MainComponent() :
     label_radius.setText("Radius", dontSendNotification);
     label_radius.attachToComponent(&slider_radius, true);
 
-    addAndMakeVisible(&button_show_spl);
-    button_show_spl.setButtonText("Draw SPL");
-    button_show_spl.onClick = [this]() 
+    addAndMakeVisible(&button_show_pressure);
+    button_show_pressure.setButtonText("Pressure");
+    button_show_pressure.setTooltip("Plot sound pressure as percent gain applied to the signal.");
+    button_show_pressure.onClick = [this]() 
     { 
-        const bool next_show_spl = button_show_spl.getToggleState();
-        button_show_contours.setEnabled(next_show_spl);
-        button_gamma_correct.setEnabled(next_show_spl);
-        button_show_crests_only.setEnabled(next_show_spl && current_method == SoundPropagation::Method_Wave);
-        show_spl = next_show_spl;
+        const bool next_show_pressure = button_show_pressure.getToggleState();
+        button_show_contours.setEnabled(next_show_pressure);
+        button_gamma_correct.setEnabled(next_show_pressure);
+        button_show_crests_only.setEnabled(next_show_pressure && current_method == SoundPropagation::Method_Wave);
+        show_pressure = next_show_pressure;
     };
 
     addAndMakeVisible(&button_show_ray_casts);
     button_show_ray_casts.setButtonText("Ray Casts");
+    button_show_ray_casts.setTooltip("Draw ray casts used to compute sound pressure.");
     button_show_ray_casts.onClick = [this]() { show_ray_casts = button_show_ray_casts.getToggleState(); };
 
     addAndMakeVisible(&button_show_grid);
@@ -206,11 +208,13 @@ MainComponent::MainComponent() :
     addAndMakeVisible(&button_show_crests_only);
     button_show_crests_only.setButtonText("Crests");
     button_show_crests_only.setEnabled(false);
+    button_show_crests_only.setTooltip("Plot only sound pressure gain corresponding to the wave(s) period,\n or phase % 2pi = 0.");
     button_show_crests_only.onClick = [this]() { show_crests_only = button_show_crests_only.getToggleState(); };
 
     addAndMakeVisible(&button_gamma_correct);
     button_gamma_correct.setButtonText("Gamma");
     button_gamma_correct.setEnabled(false);
+    button_gamma_correct.setTooltip("Apply gamma correct to sound pressure plot.");
     button_gamma_correct.onClick = [this]() { flag_gamma_correct = button_gamma_correct.getToggleState(); };
     
     addAndMakeVisible(&slider_spl_freq);
@@ -402,13 +406,13 @@ MainComponent::MainComponent() :
 
     addAndMakeVisible(&combo_method);
     combo_method.addListener(this);
-    combo_method.addItem("Specular (LOS)", SoundPropagation::Method_SpecularLOS);
+    combo_method.addItem("Direct (Line of Sight)", SoundPropagation::Method_DirectLOS);
     combo_method.addItem("Ray Casts", SoundPropagation::Method_RayCasts);
     combo_method.addItem("A*", SoundPropagation::Method_Pathfinding);
     combo_method.addItem("LOS then A*", SoundPropagation::Method_LOSAStarFallback);
     combo_method.addItem("Wave Equation", SoundPropagation::Method_Wave);
-    current_method = SoundPropagation::Method_SpecularLOS;
-    combo_method.setSelectedId(SoundPropagation::Method_SpecularLOS);
+    current_method = SoundPropagation::Method_DirectLOS;
+    combo_method.setSelectedId(SoundPropagation::Method_DirectLOS);
 
     addAndMakeVisible(&label_method);
     label_method.setText("Method", dontSendNotification);
@@ -487,7 +491,7 @@ void MainComponent::paint (Graphics& _g)
 {
     // You can add your component specific drawing code here!
     // This will draw over the top of the openGL background.
-    if (show_spl.load())
+    if (show_pressure.load())
     {
         if (flag_refresh_image.load())
         {
@@ -573,8 +577,8 @@ void MainComponent::PaintSimulation(Graphics& _g, const Rectangle<int> _bounds, 
             std::shared_ptr<const PlannerAStar> astar_planner = std::dynamic_pointer_cast<const PlannerAStar>(planner);
             if (astar_planner == nullptr)
             {
-                if (std::shared_ptr<const PlannerTwoStages<PlannerSpecularLOS, PlannerAStar> > planner_two =
-                    std::dynamic_pointer_cast<const PlannerTwoStages<PlannerSpecularLOS, PlannerAStar>>(planner))
+                if (std::shared_ptr<const PlannerTwoStages<PlannerDirectLOS, PlannerAStar> > planner_two =
+                    std::dynamic_pointer_cast<const PlannerTwoStages<PlannerDirectLOS, PlannerAStar>>(planner))
                 {
                     astar_planner = planner_two->Secondary();
                 }
@@ -700,7 +704,7 @@ void MainComponent::resized()
     juce::Rectangle<int> frame_button_l = frame_next();
     juce::Rectangle<int> frame_button_r = frame_button_l.removeFromRight(frame_button_l.getWidth() / 2);    
     button_show_ray_casts.setBounds(frame_button_l);
-    button_show_spl.setBounds(frame_button_r);
+    button_show_pressure.setBounds(frame_button_r);
     
     frame_button_l = frame_next();
     frame_button_r = frame_button_l.removeFromRight(frame_button_l.getWidth() / 2);
@@ -995,7 +999,7 @@ void MainComponent::update()
         moving_emitter->ComputeGain(simulated_gain);
     }
     
-    if (show_spl.load() &&        
+    if (show_pressure.load() &&        
         !flag_refresh_image.load())
     {
         bool is_working = flag_update_working.load();
@@ -1118,7 +1122,7 @@ void MainComponent::comboBoxChanged(ComboBox* comboBoxThatHasChanged)
         switch (current_method)
         {
         case SoundPropagation::Method_Wave:
-            button_show_crests_only.setEnabled(show_spl.load());
+            button_show_crests_only.setEnabled(show_pressure.load());
             break;
         case SoundPropagation::Method_Pathfinding:
         case SoundPropagation::Method_LOSAStarFallback:

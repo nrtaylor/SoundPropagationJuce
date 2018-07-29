@@ -14,7 +14,7 @@ namespace SoundPropagation
 {
     enum MethodType : signed int
     {
-        Method_SpecularLOS = 1,
+        Method_DirectLOS = 1,
         Method_RayCasts,
         Method_Pathfinding,
         Method_Wave,
@@ -65,7 +65,7 @@ public:
     virtual ~PropagationPlanner() = default;
 };
 
-class PlannerSpecularLOS : public PropagationPlanner
+class PlannerDirectLOS : public PropagationPlanner
 {
 public:
     void Preprocess(std::shared_ptr<const RoomGeometry> _room) override;

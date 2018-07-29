@@ -123,13 +123,6 @@ private:
     std::atomic_int32_t receiver_x;
     std::atomic_int32_t receiver_y;
 
-    // Gui
-    ComboBox combo_room;
-    Label label_selected_room;
-
-    ComboBox combo_method;
-    Label label_method;
-
     std::atomic<SoundPropagation::MethodType> current_method;
 
     Image image_spl;
@@ -139,12 +132,18 @@ private:
     std::atomic_bool flag_update_working;
 
     // Image options
-    std::atomic_bool show_spl;
+    std::atomic_bool show_pressure;
     std::atomic_bool show_ray_casts;
     std::atomic_bool show_grid;
     std::atomic_bool show_contours;
     std::atomic_bool show_crests_only;
     std::atomic_bool flag_gamma_correct;
+
+    // Gui
+    ComboBox combo_room;
+    Label label_selected_room;
+    ComboBox combo_method;
+    Label label_method;
 
     Slider slider_gain;
     Label label_gain;
@@ -152,7 +151,7 @@ private:
     Label label_freq;
     Slider slider_radius;
     Label label_radius;
-    ToggleButton button_show_spl;
+    ToggleButton button_show_pressure;
     ToggleButton button_show_ray_casts;
     ToggleButton button_show_grid;
     ToggleButton button_show_contours;

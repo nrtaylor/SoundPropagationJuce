@@ -8,6 +8,8 @@
 #include <memory>
 #include <vector>
 
+class PropagationPlanner;
+
 namespace SoundPropagation
 {
     enum MethodType : signed int

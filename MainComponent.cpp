@@ -227,10 +227,9 @@ MainComponent::MainComponent() :
     label_spl_freq.attachToComponent(&slider_spl_freq, true);
 
     addAndMakeVisible(&slider_time_scale);
-    slider_time_scale.setRange(1.0, 1000.0, 1.0);
+    slider_time_scale.setRange(1.0, 2000.0, 1.0);
     slider_time_scale.setTextValueSuffix(" x");
-    slider_time_scale.setValue(340.0);
-    slider_time_scale.setSkewFactorFromMidPoint(100.0);
+    slider_time_scale.setValue(340.0);    
     slider_time_scale.addListener(this);
     time_scale = 340.f;
 
@@ -240,35 +239,13 @@ MainComponent::MainComponent() :
 
     addAndMakeVisible(&group_atmosphere);
     group_atmosphere.setText("Atmosphere");
-
-    slider_temperature.setBounds(20, 22, 198, 22);
-    slider_temperature.setRange(-20.0, 120.0, 1.0);
-    slider_temperature.setTextValueSuffix(" F");
-    slider_temperature.setValue(60.0);
-    slider_temperature.addListener(this);
-    group_atmosphere.addAndMakeVisible(&slider_temperature);
-
-    slider_humidity.setBounds(20, 44, 198, 22);
-    slider_humidity.setRange(1, 99.9, 0.50);
-    slider_humidity.setTextValueSuffix(" %H");
-    slider_humidity.setValue(60.0);
-    slider_humidity.addListener(this);
-    group_atmosphere.addAndMakeVisible(&slider_humidity);
-
-    slider_pressure.setBounds(20, 66, 198, 22);
-    slider_pressure.setRange(
-        AtmosphericAbsorption::kPressureEverestLevelPascals,
-        AtmosphericAbsorption::kPressureDeadSeaRecordLevelPascals,
-        25.0);
-    slider_pressure.setTextValueSuffix(" kPa");
-    slider_pressure.setValue(AtmosphericAbsorption::kPressureSeaLevelPascals);
-    slider_pressure.setSkewFactorFromMidPoint(AtmosphericAbsorption::kPressureSeaLevelPascals);
-    slider_pressure.addListener(this);
-    group_atmosphere.addAndMakeVisible(&slider_pressure);
-
-    label_cutoff.setText("Cuttoff Freq", dontSendNotification);
-    label_cutoff.setBounds(12, 88, 198, 22);
-    group_atmosphere.addAndMakeVisible(&label_cutoff);
+    
+    atmospheric_component.setBounds(4, 14, atmospheric_component.getWidth(), atmospheric_component.getHeight());
+    group_atmosphere.addAndMakeVisible(&atmospheric_component);
+    atmospheric_component.on_coefficient_changed = [this](const float cuttoff_frequency) 
+    {
+        SetAtmosphericFilterCuttoff(cuttoff_frequency);
+    };
 
     addAndMakeVisible(&combo_selected_sound);
 
@@ -738,8 +715,11 @@ void MainComponent::resized()
 
     slider_time_scale.setBounds(frame_next());
 
-    juce::Rectangle<int> frame_atmosphere = frame.removeFromTop(116).reduced(2);
-    frame_atmosphere.setLeft(frame_atmosphere.getX() - 40);
+    const int atmosphere_offset_x = atmospheric_component.getBounds().getPosition().x + atmospheric_component.getWidth();
+    const int atmosphere_offset_y = atmospheric_component.getHeight() + atmospheric_component.getBounds().getPosition().y;
+    juce::Rectangle<int> frame_atmosphere = frame.removeFromTop(atmosphere_offset_y + 4 + 2).reduced(2);
+    
+    frame_atmosphere.setLeft(frame_atmosphere.getX() + (frame_atmosphere.getWidth() - atmosphere_offset_x));
     group_atmosphere.setBounds(frame_atmosphere);
 
     button_save_image.setBounds(frame_next());
@@ -874,6 +854,8 @@ void MainComponent::GenerateSPLImage(Image& _image,
     std::vector<float> previous_row; previous_row.resize(extent);
     std::fill(previous_row.begin(), previous_row.end(), FLT_MAX);
 
+    std::vector<float> previous_row_abs; previous_row_abs.resize(extent); previous_row_abs[0] = 0.f;
+
     PropagationResult result{ SoundPropagation::PRD_GAIN };
 
     for (int i = 0; i < extent; ++i)
@@ -898,10 +880,13 @@ void MainComponent::GenerateSPLImage(Image& _image,
                 0.f };
             planner->Simulate(result, pixel_to_world, _time);
             float energy = result.gain;
-            if (filter_crests &&
-                result.absolute < 0.92f)
+            if (filter_crests)
             {
-                energy = 0.f;
+                if (result.absolute < 0.92f)
+                {
+                    energy = 0.f;
+                }
+                previous_row_abs[j] = result.absolute;
             }
             int contour_color = -1;
 
@@ -1061,28 +1046,20 @@ void MainComponent::sliderValueChanged(Slider* slider)
     {
         time_scale = (float)slider_time_scale.getValue();
     }
-    else if (slider == &slider_radius ||
-             slider == &slider_temperature ||
-             slider == &slider_humidity ||
-             slider == &slider_pressure)
+    else if (slider == &slider_radius)
     {
         const float next_radius = (float)slider_radius.getValue();
-        const double next_temperature = slider_temperature.getValue();
-        const double next_humidity = slider_humidity.getValue();
-        const double next_pressure = slider_pressure.getValue();
         sources[selected_source].moving_emitter->SetRadius(next_radius);
-        const double filter_gain_at_cutoff_db = -3.;
-        const double target_atmospheric_coefficient = -filter_gain_at_cutoff_db / (double)next_radius;
-        const float cuttoff_frequency = (float)AtmosphericAbsorption::Frequency(target_atmospheric_coefficient, next_humidity, next_temperature, next_pressure);
-        atmospheric_filters[0]->Initialize(cuttoff_frequency, sample_rate);
-        atmospheric_filters[0]->bypass = cuttoff_frequency > sample_rate / 2.f;
-        atmospheric_filters[1]->Initialize(cuttoff_frequency, sample_rate);
-        atmospheric_filters[1]->bypass = cuttoff_frequency > sample_rate / 2.f;
-        
-        char b[256];
-        sprintf_s(b, "Cutoff %.1f Hz", cuttoff_frequency);
-        label_cutoff.setText(b, dontSendNotification);
+        atmospheric_component.SetDistance(next_radius, sendNotification);
     }
+}
+
+void MainComponent::SetAtmosphericFilterCuttoff(const float cuttoff_frequency)
+{
+    atmospheric_filters[0]->Initialize(cuttoff_frequency, sample_rate);
+    atmospheric_filters[0]->bypass = cuttoff_frequency > sample_rate / 2.f;
+    atmospheric_filters[1]->Initialize(cuttoff_frequency, sample_rate);
+    atmospheric_filters[1]->bypass = cuttoff_frequency > sample_rate / 2.f;
 }
 
 void MainComponent::RefreshSourceParams()
@@ -1136,13 +1113,13 @@ void MainComponent::comboBoxChanged(ComboBox* comboBoxThatHasChanged)
         }
         current_method = static_cast<SoundPropagation::MethodType>(combo_method.getSelectedId());        
         sources[selected_source].planner = PropagationPlanner::MakePlanner(current_method);
-
+ 
         button_show_grid.setEnabled(false);
         button_show_crests_only.setEnabled(false);
         switch (current_method)
         {
         case SoundPropagation::Method_Wave:
-            button_show_crests_only.setEnabled(true);
+            button_show_crests_only.setEnabled(show_spl.load());
             break;
         case SoundPropagation::Method_Pathfinding:
         case SoundPropagation::Method_LOSAStarFallback:

@@ -7,6 +7,7 @@
 #pragma once
 
 #include "../JuceLibraryCode/JuceHeader.h"
+#include "AtmosphericAbsorptionComponent.h"
 #include <mutex>
 #include <array>
 
@@ -193,10 +194,7 @@ private:
     std::atomic<float> time_scale;
 
     GroupComponent group_atmosphere;    
-    Slider slider_temperature;
-    Slider slider_humidity;
-    Slider slider_pressure;
-    Label label_cutoff;
+    AtmosphericAbsorptionComponent atmospheric_component;
 
     ComboBox combo_selected_sound;
     Label label_selected_sound;
@@ -212,6 +210,8 @@ private:
         std::shared_ptr<RoomGeometry> room,
         const float _time, const float _zoom_factor, const bool _allow_timeout = false);
     void ExportAsImage(const File& file, const int width, const int height, const float _zoom_factor);
+
+    void SetAtmosphericFilterCuttoff(const float cuttoff_frequency);
 
     // UI Helpers
     void RefreshSourceParams();

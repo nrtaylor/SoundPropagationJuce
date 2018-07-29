@@ -8,6 +8,7 @@
 
 #include "../JuceLibraryCode/JuceHeader.h"
 #include "AtmosphericAbsorptionComponent.h"
+#include "nReadOrWriteObject.h"
 #include <mutex>
 #include <array>
 
@@ -15,34 +16,8 @@ class MovingEmitter;
 class RoomGeometry;
 class PropagationPlanner;
 struct PropagationResult;
-namespace nDSP
-{
-    struct Butterworth1Pole;
-}
-namespace SoundPropagation
-{
-    enum MethodType : int32;
-}
-
-enum ReadWriteControl : uint32
-{
-    RW_NONE = 0x0,
-    RW_WRITING = 0x01,
-    RW_READING = 0x02,
-};
-
-template<class T>
-struct ReadWriteObject
-{
-    std::atomic<ReadWriteControl> lock;
-    T object;
-};
-
-struct PlannerToResult
-{
-    std::shared_ptr<const PropagationPlanner> planner;
-    std::unique_ptr<PropagationResult> result;
-};
+namespace nDSP { struct Butterworth1Pole; }
+namespace SoundPropagation { enum MethodType : int32; }
 
 struct SoundBuffer
 {
@@ -124,9 +99,14 @@ private:
     std::unique_ptr<std::mutex> mutex_emitter_update;
     std::array<std::unique_ptr<nDSP::Butterworth1Pole>, 2> atmospheric_filters;
     std::vector<std::shared_ptr<RoomGeometry>> rooms;
-    std::shared_ptr<RoomGeometry> current_room;
-    
-    using ReadWriteResult = ReadWriteObject<PlannerToResult>;
+    std::shared_ptr<RoomGeometry> current_room;    
+
+    struct PlannerToResult
+    {
+        std::shared_ptr<const PropagationPlanner> planner;
+        std::unique_ptr<PropagationResult> result;
+    };
+    using ReadWriteResult = ReadOrWriteObject<PlannerToResult>;
     std::array<ReadWriteResult, 3> simulation_results;
     uint32 write_index;
     std::atomic_uint32_t read_index;

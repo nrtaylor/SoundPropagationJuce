@@ -52,7 +52,7 @@ void AtmosphericAbsorptionComponent::HandleValueChanged(const NotificationType n
     const float cuttoff_frequency = (float)AtmosphericAbsorption::Frequency(target_atmospheric_coefficient, next_humidity, next_temperature, next_pressure);
 
     juce::String cutoff_text;
-    cutoff_text << "Cutoff " <<  juce::String(cuttoff_frequency, 1) << " Hz";
+    cutoff_text << "Cutoff Freq:" <<  juce::String(cuttoff_frequency, 1) << " Hz";
     label_cutoff.setText(cutoff_text, dontSendNotification);
 
     if (notification != dontSendNotification)

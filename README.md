@@ -7,6 +7,7 @@ Current Stage:
 - First frequency and time dependent modes added.
 - Refactoring after adding "planners" to handle simulation instead of the rooms.
 - Supporting up to 3 sources
+- Make code re-useable outside of the test bed.
 
 Next Stage:
 - Thinking about beginning FEM set-up.
@@ -14,7 +15,6 @@ Next Stage:
 
 Known limitations to fix later:
 - The apps screen dimenisions dictates the resolution of the generated image used to display results.
-- Receiver location is fixed at 0,0.
 - Frequency mode does not generate audio.
 - A* mode is inefficient
 

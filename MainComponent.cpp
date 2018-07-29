@@ -391,6 +391,39 @@ MainComponent::MainComponent() :
         rooms.emplace_back(room);
         combo_room.addItem("Two Small Obstructors", static_cast<int>(rooms.size()));
     }
+    // Trees
+    {
+        std::shared_ptr<RoomGeometry> room = std::make_shared<RoomGeometry>(RoomGeometry());
+        const nMath::Vector offsets[] = {
+            { -12.f, -12.f, 0.f },
+            { 2.f, -3.8f, 0.f },
+            { 18.5f, -16.f, 0.f },
+            { 12.f, -12.f, 0.f },
+            { 9.f, -3.8f, 0.f },
+            { 7.5f, -9.f, 0.f },
+            { -11.f, 23.f, 0.f },
+            { 7.f, -8.f, 0.f },
+            { 8.5f, -16.f, 0.f },
+            { 14.f, 14.f, 0.f },
+            { 19.f, -19.18f, 0.f },
+            { -16.f, -8.5f, 0.f },
+            { -12.f, 8.5f, 0.f },
+            { -11.f, -23.f, 0.f },
+            { 17.f, -4.f, 0.f },
+            { 6.5f, 4.f, 0.f },
+            { 7.5f, 9.f, 0.f }
+        };
+        for (int i = 0; i < sizeof(offsets) / sizeof(offsets[0]); ++i)
+        {
+            const nMath::Vector& offset = offsets[i];
+            room->AddWall(offset + nMath::Vector{ 1.f,  -1.f, 0.f }, offset + nMath::Vector{ 2.f,  0.f, 0.f });
+            room->AddWall(offset + nMath::Vector{ 2.f,  0.f, 0.f }, offset + nMath::Vector{ 1.f, 1.f, 0.f });
+            room->AddWall(offset + nMath::Vector{ 1.f, 1.f, 0.f }, offset + nMath::Vector{ 0.f, 0.f, 0.f });
+            room->AddWall(offset + nMath::Vector{ 0.f, 0.f, 0.f }, offset + nMath::Vector{ 1.f,  -1.f, 0.f });
+        }
+        rooms.emplace_back(room);
+        combo_room.addItem("Trees", static_cast<int>(rooms.size()));
+    }
     // Misc
     {
         std::shared_ptr<RoomGeometry> room = std::make_shared<RoomGeometry>(RoomGeometry());
@@ -408,9 +441,9 @@ MainComponent::MainComponent() :
     combo_method.addListener(this);
     combo_method.addItem("Direct (Line of Sight)", SoundPropagation::Method_DirectLOS);
     combo_method.addItem("Ray Casts", SoundPropagation::Method_RayCasts);
-    combo_method.addItem("A*", SoundPropagation::Method_Pathfinding);
+    combo_method.addItem("A* (Pathfinding)", SoundPropagation::Method_Pathfinding);
     combo_method.addItem("LOS then A*", SoundPropagation::Method_LOSAStarFallback);
-    combo_method.addItem("Wave Equation", SoundPropagation::Method_Wave);
+    combo_method.addItem("Waves", SoundPropagation::Method_Wave);
     current_method = SoundPropagation::Method_DirectLOS;
     combo_method.setSelectedId(SoundPropagation::Method_DirectLOS);
 

@@ -43,6 +43,7 @@ struct PropagationResult
     const SoundPropagation::ResultConfig config;
     float gain; // TODO: find better term. Perhaps dampening?
     float absolute;
+    int32_t wave_id;
 
     std::vector<nMath::LineSegment> intersections;
     std::shared_ptr<PropagationSimulationCache> cache;

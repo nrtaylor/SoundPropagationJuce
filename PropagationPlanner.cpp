@@ -187,10 +187,13 @@ void PlannerWave::Simulate(PropagationResult& result, const nMath::Vector& _rece
         const float wave = cosf(angle * (distance * inv_speed - time_scaled));
         value = geometric_attenuation * wave; // TODO: Normalization on gfx side
         result.absolute = wave;
+        result.wave_id = 0;
         //value = geometric_attenuation * cosf(angle * (distance * inv_speed - time_scaled)); // TODO: Normalization on gfx side
     }
+    int wave_id = 0;
     for (const nMath::Vector& v : first_reflections)
     {
+        ++wave_id;
         const float first_distance = nMath::Length(_receiver - v);
         const float reflect_phase = nMath::Length(source - v);
         //const float first_geometric_attenuation = nMath::Min(1.f, 1.f / (first_distance));
@@ -201,6 +204,7 @@ void PlannerWave::Simulate(PropagationResult& result, const nMath::Vector& _rece
         if (wave > result.absolute)
         {
             result.absolute = wave;
+            result.wave_id = wave_id;
         }
         //float first_value = first_geometric_attenuation * cosf(angle * (first_distance * inv_speed - time_scaled)); // TODO: Normalization on gfx side
         norm_value += first_geometric_attenuation;

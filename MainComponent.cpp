@@ -890,7 +890,13 @@ void MainComponent::GenerateSPLImage(Image& _image,
     std::vector<float> previous_row; previous_row.resize(extent);
     std::fill(previous_row.begin(), previous_row.end(), FLT_MAX);
 
-    std::vector<float> previous_row_abs; previous_row_abs.resize(extent); previous_row_abs[0] = 0.f;
+    std::vector<float> previous_row_abs;
+    std::vector<int32> previous_row_id;
+    if (filter_crests)
+    {
+        previous_row_abs.resize(extent); previous_row_abs[0] = 0.f;
+        previous_row_id.resize(extent); previous_row_id[0] = 0.f;
+    }
 
     PropagationResult result{ SoundPropagation::PRD_GAIN };
 
@@ -918,11 +924,14 @@ void MainComponent::GenerateSPLImage(Image& _image,
             float energy = result.gain;
             if (filter_crests)
             {
-                if (result.absolute < 0.92f)
+                if (!(j > 1 && i > 1 &&
+                    previous_row_abs[j - 1] > result.absolute &&
+                    previous_row_abs[j - 1] > previous_row_abs[j - 2]))
                 {
                     energy = 0.f;
                 }
                 previous_row_abs[j] = result.absolute;
+                previous_row_id[j] = result.wave_id;
             }
             int contour_color = -1;
 

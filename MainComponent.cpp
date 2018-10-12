@@ -12,6 +12,8 @@
 #include "PropagationPlanner.h"
 #include "PropagationPlannerAStar.h"
 
+static const bool kTestingPanLaws = true;
+
 //#define PROFILE_SIMULATION
 
 namespace ImageHelper
@@ -541,7 +543,7 @@ void MainComponent::paint (Graphics& _g)
     const bool draw_waves = false;
 
     const Rectangle<int> bounds = _g.getClipBounds();
-    const float zoom_factor = 10.f;
+    const float zoom_factor = kTestingPanLaws ? 150.f : 10.f;
     if (!draw_waves)
     {
         PaintRoom(_g, bounds, zoom_factor);    
@@ -558,6 +560,53 @@ void MainComponent::paint (Graphics& _g)
 
         _g.drawText(juce::String("x"), center.x - 11, center.y, 22, 22, juce::Justification::centred);
     }
+}
+
+void DrawMeter(Graphics& _g, const Rectangle<int> _bounds, const float gain, const juce::String* label = nullptr)
+{
+    Rectangle<int> meter_bounds = _bounds;
+    Rectangle<int> meter_label = meter_bounds.removeFromBottom(32);
+    meter_label.removeFromBottom(16);
+    meter_label.reduce(1, 0);
+    meter_bounds.reduce(2, 4);
+
+    _g.setColour(Colour::fromRGB(0xFF, 0xFF, 0xFF));
+    _g.drawRect(meter_bounds);
+
+    const float gain_db = 20.f * log10f(gain + FLT_EPSILON);
+    
+    _g.setFont(11);
+    if (label == nullptr) {
+        if (gain_db > -9.9f) {
+            _g.drawText(juce::String::formatted("%.1f", gain_db), meter_label,
+                juce::Justification::centred);
+        }
+        else {
+            _g.drawText(juce::String::formatted("%.0f", gain_db), meter_label,
+                juce::Justification::centred);
+        }
+    }
+
+    const float gain_floor = -60.f;
+
+    const float gain_db_ratio = 1.f - gain_db / gain_floor;
+    meter_bounds.reduce(2, 2);
+
+    _g.setFont(10);
+    float db_mark_value = -3.f;
+    while (db_mark_value > gain_floor) {
+        const float gain_mark_db_ratio = db_mark_value / gain_floor;
+        _g.drawText(juce::String::formatted("%.0f", -db_mark_value),
+            meter_bounds.getTopLeft().x,
+            meter_bounds.getHeight() * gain_mark_db_ratio - 5,
+            meter_bounds.getWidth(),
+            8,
+            juce::Justification::right);
+        db_mark_value -= 3.f;
+    }
+
+    _g.setColour(Colour::fromRGBA(0xFF, 0xFF, 0xFF, 0x80));
+    _g.fillRect(meter_bounds.removeFromBottom(meter_bounds.getHeight() * gain_db_ratio));    
 }
 
 void MainComponent::PaintEmitter(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const
@@ -580,36 +629,12 @@ void MainComponent::PaintEmitter(Graphics& _g, const Rectangle<int> _bounds, con
     nMath::Vector emitter_draw_pos{ emitter_pos.x * _zoom_factor + center.x, -emitter_pos.y * _zoom_factor + center.y, 0.f };
     _g.fillEllipse(emitter_draw_pos.x - 1.f, emitter_draw_pos.y - 1.f, 2.5, 2.5);
 
-    Rectangle<int> meter_bounds = _bounds;
-    Rectangle<int> meter_labels = meter_bounds.removeFromBottom(32);
-    meter_labels.removeFromBottom(8);
-    Rectangle<int> meter_right = meter_bounds.removeFromRight(20);
-    meter_right.reduce(4, 8);
-    Rectangle<int> meter_left = meter_bounds.removeFromRight(20);
-    meter_left.reduce(4, 8);
+    Rectangle<int> meter_bounds = _bounds; meter_bounds.reduce(4, 4);
+    Rectangle<int> meter_right = meter_bounds.removeFromRight(24);
+    Rectangle<int> meter_left = meter_bounds.removeFromRight(24);
 
-    _g.drawRect(meter_right);
-    _g.drawRect(meter_left);
-
-    const float gain_left_db = 20.f * log10f(gain_left + FLT_EPSILON);
-    const float gain_right_db = 20.f * log10f(gain_right + FLT_EPSILON);
-    
-    _g.setFont(12);
-    _g.drawText(juce::String::formatted("%.1f", gain_right_db), meter_labels.removeFromRight(20),
-        juce::Justification::centred);
-    _g.drawText(juce::String::formatted("%.1f", gain_left_db), meter_labels.removeFromRight(40),
-        juce::Justification::centred);
-
-    const float gain_left_db_ratio = 1.f - gain_left_db / -96.f;
-    const float gain_right_db_ratio = 1.f - gain_right_db / -96.f;
-
-    _g.setColour(Colour::fromRGBA(0xFF, 0xFF, 0xFF, 0x80));
-    meter_right.reduce(2, 2);
-    meter_left.reduce(2, 2);
-
-
-    _g.fillRect(meter_left.removeFromBottom(meter_left.getHeight() * gain_left_db_ratio));
-    _g.fillRect(meter_right.removeFromBottom(meter_right.getHeight() * gain_right_db_ratio));    
+    DrawMeter(_g, meter_right, gain_right);
+    DrawMeter(_g, meter_left, gain_left); 
 }
 
 void MainComponent::PaintRoom(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const
@@ -753,7 +778,7 @@ void MainComponent::resized()
     const int32 margin = 4;
 
     juce::Rectangle<int> frame = getLocalBounds();
-    const int meter_size = (20 + margin) * 2;
+    const int meter_size = (24 + margin) * 2;
     frame.removeFromRight(meter_size);
     frame.removeFromRight(margin);
     frame.removeFromTop(90);

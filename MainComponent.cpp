@@ -106,7 +106,7 @@ MainComponent::MainComponent() :
         RefreshSourceParams();
     };
     const double default_emitter_gain = 0.8;
-    const double default_emitter_freq = 0.08;
+    const double default_emitter_freq = 0.0;
     const double default_emitter_radius = 10.0;
     for (int i = 0; i < 3; ++i)
     {
@@ -187,7 +187,9 @@ MainComponent::MainComponent() :
         const bool next_show_pressure = button_show_pressure.getToggleState();
         button_show_contours.setEnabled(next_show_pressure);
         button_gamma_correct.setEnabled(next_show_pressure);
-        button_show_crests_only.setEnabled(next_show_pressure && current_method == SoundPropagation::Method_Wave);
+        button_show_crests_only.setEnabled(next_show_pressure && 
+            (current_method == SoundPropagation::Method_Wave ||
+             current_method == SoundPropagation::Method_PlaneWave));
         show_pressure = next_show_pressure;
     };
 
@@ -206,7 +208,7 @@ MainComponent::MainComponent() :
     button_show_contours.onClick = [this]() { show_contours = button_show_contours.getToggleState(); };
 
     addAndMakeVisible(&button_show_crests_only);
-    button_show_crests_only.setButtonText("Crests");
+    button_show_crests_only.setButtonText("Wave Fronts");
     button_show_crests_only.setEnabled(false);
     button_show_crests_only.setTooltip("Plot only sound pressure gain corresponding to the wave(s) period,\n or phase % 2pi = 0.");
     button_show_crests_only.onClick = [this]() { show_crests_only = button_show_crests_only.getToggleState(); };
@@ -444,6 +446,7 @@ MainComponent::MainComponent() :
     combo_method.addItem("A* (Pathfinding)", SoundPropagation::Method_Pathfinding);
     combo_method.addItem("LOS then A*", SoundPropagation::Method_LOSAStarFallback);
     combo_method.addItem("Waves", SoundPropagation::Method_Wave);
+    combo_method.addItem("Plane Waves", SoundPropagation::Method_PlaneWave);
     current_method = SoundPropagation::Method_DirectLOS;
     combo_method.setSelectedId(SoundPropagation::Method_DirectLOS);
 
@@ -535,11 +538,26 @@ void MainComponent::paint (Graphics& _g)
         _g.drawImageAt(image_spl, 0, 0);
     }
 
+    const bool draw_waves = false;
+
     const Rectangle<int> bounds = _g.getClipBounds();
     const float zoom_factor = 10.f;
-    PaintRoom(_g, bounds, zoom_factor);    
-    PaintSimulation(_g, bounds, zoom_factor);
-    PaintEmitter(_g, bounds, zoom_factor);
+    if (!draw_waves)
+    {
+        PaintRoom(_g, bounds, zoom_factor);    
+        PaintSimulation(_g, bounds, zoom_factor);
+        PaintEmitter(_g, bounds, zoom_factor);
+    }
+    else
+    {
+        const nMath::Vector center = ImageHelper::Center(bounds);
+
+        _g.setColour(Colour::fromRGB(0xCF, 0xCF, 0xCF));
+        _g.drawLine(Line<float>(0.f, center.y, bounds.getWidth(), center.y), 0.75f);
+        _g.drawLine(Line<float>(center.x, center.y - 1, center.x, center.y - bounds.getHeight()/16.f), 0.75f);
+
+        _g.drawText(juce::String("x"), center.x - 11, center.y, 22, 22, juce::Justification::centred);
+    }
 }
 
 void MainComponent::PaintEmitter(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const
@@ -553,6 +571,7 @@ void MainComponent::PaintEmitter(Graphics& _g, const Rectangle<int> _bounds, con
     {
         std::lock_guard<std::mutex> guard(*mutex_emitter_update);
         emitter_pos = sources[selected_source].moving_emitter->GetPosition();
+
     }
     nMath::Vector emitter_draw_pos{ emitter_pos.x * _zoom_factor + center.x, -emitter_pos.y * _zoom_factor + center.y, 0.f };
     _g.fillEllipse(emitter_draw_pos.x - 1.f, emitter_draw_pos.y - 1.f, 2.5, 2.5);
@@ -657,7 +676,7 @@ void MainComponent::ExportAsImage(const File& file, const int width, const int h
     const File image_file = file.withFileExtension(".png");
     PNGImageFormat png_format;
     FileOutputStream file_output(image_file);
-    //std::lock_guard<std::mutex> guard(mutex_image);    
+    
     Image export_image = ImageHelper::SquareImage(juce::Rectangle<int>(width, height));
     const float time_now = (float)(Time::currentTimeMillis() % ((1 + (int)test_frequency) * 1000));
 
@@ -865,6 +884,70 @@ _declspec(noinline) bool WasteTime(int seed)
     return j > 0.f;
 }
 
+void MainComponent::GenerateWaveImage(Image& _image,
+    std::shared_ptr<PropagationPlanner> planner,
+    std::shared_ptr<RoomGeometry> room,
+    const float _time,
+    const float _zoom_factor,
+    const bool _allow_timeout)
+{
+    const nMath::Vector center{ _image.getWidth() / 2.f, _image.getWidth() / 2.f, 0.f };
+    const float inv_zoom_factor = 1.f / (_zoom_factor * 10.f);
+
+    const bool overlay_contours = show_contours.load();
+    const bool filter_crests = show_crests_only.load();
+    const bool gamma_correct = flag_gamma_correct.load();
+    const int extent = _image.getWidth();
+    const Image::BitmapData bitmap(_image, Image::BitmapData::writeOnly);
+
+#ifdef PROFILE_SIMULATION
+    Thread::sleep(5000);
+#endif
+    uint8* pixel = bitmap.getPixelPointer(0, 0);
+
+    PropagationResult result{ SoundPropagation::PRD_GAIN };
+
+    for (int i = 0; i < extent; ++i)
+    {
+        const float normalized = 2 * i / (float)extent;
+        for (int j = 0; j < extent; ++j)
+        {
+            if (_allow_timeout &&
+                !flag_update_working)
+            {
+                flag_refresh_image.store(true);
+                return; // task cancelled
+            }
+
+            const nMath::Vector pixel_to_world = { (j - center.x) * inv_zoom_factor,
+                (i - center.y) * -inv_zoom_factor,
+                0.f };
+
+            float energy_canidate[2];
+            {
+                planner->Simulate(result, pixel_to_world, _time);
+                float compression_amount = 0.25f;
+                float mag_epsilon = 0.0055f * (1.f - fabsf(result.magnitude));
+                energy_canidate[0] = jmax<float>(0.f, mag_epsilon + 1.f - fabsf(normalized - (compression_amount * -result.magnitude + 1.f)) / 2.f);                
+                energy_canidate[0] = powf(energy_canidate[0], 600);
+            }
+            {
+                planner->Simulate(result, pixel_to_world, 0);
+                float compression_amount = 0.25f;
+                float mag_epsilon = 0.0045f * (1.f - fabsf(result.magnitude));
+                energy_canidate[1] = jmax<float>(0.f, mag_epsilon + 1.f - fabsf(normalized - (compression_amount * -result.magnitude + 1.f)) / 2.f);
+                energy_canidate[1] = jmin<float>(1.f, powf(energy_canidate[1], 700)) * 0.6f;
+            }
+            float energy = jmax<float>(energy_canidate[0], energy_canidate[1]);
+            uint8 colour = (uint8)jmin<uint32>(255, (uint32)(255.f*energy));
+            *pixel++ = colour;
+            *pixel++ = colour;
+            *pixel++ = colour;
+            *pixel++ = 0xFF;
+        }
+    }
+}
+
 void MainComponent::GenerateSPLImage(Image& _image, 
     std::shared_ptr<PropagationPlanner> planner, 
     std::shared_ptr<RoomGeometry> room, 
@@ -895,7 +978,7 @@ void MainComponent::GenerateSPLImage(Image& _image,
     if (filter_crests)
     {
         previous_row_abs.resize(extent); previous_row_abs[0] = 0.f;
-        previous_row_id.resize(extent); previous_row_id[0] = 0.f;
+        previous_row_id.resize(extent); previous_row_id[0] = 0;
     }
 
     PropagationResult result{ SoundPropagation::PRD_GAIN };
@@ -930,6 +1013,12 @@ void MainComponent::GenerateSPLImage(Image& _image,
                 {
                     energy = 0.f;
                 }
+                //if (j > 1 && i > 1)
+                //{
+                //    float partial_x = previous_row_abs[j - 1] - result.absolute;
+                //    float partial_y = previous_row_abs[j] - result.absolute;
+                //    energy = energy*partial_x + energy*partial_y;
+                //}
                 previous_row_abs[j] = result.absolute;
                 previous_row_id[j] = result.wave_id;
             }
@@ -1043,7 +1132,7 @@ void MainComponent::update()
     
     if (show_pressure.load() &&        
         !flag_refresh_image.load())
-    {
+    {        
         bool is_working = flag_update_working.load();
         if (!is_working &&
             flag_update_working.compare_exchange_strong(is_working, true))
@@ -1054,8 +1143,16 @@ void MainComponent::update()
             }
 
             std::thread worker = std::thread([this, planner, room, time_now] {
+                const bool show_wave = false;
                 std::lock_guard<std::mutex> guard(mutex_image);
-                GenerateSPLImage(image_next, planner, room, time_now, 1.f, true);
+                if (!show_wave)
+                {
+                    GenerateSPLImage(image_next, planner, room, time_now, 1.f, true);
+                }
+                else
+                {
+                    GenerateWaveImage(image_next, planner, room, time_now, 1.f, true);
+                }
                 flag_update_working.store(false);
                 flag_refresh_image.store(true);
             });
@@ -1164,6 +1261,7 @@ void MainComponent::comboBoxChanged(ComboBox* comboBoxThatHasChanged)
         switch (current_method)
         {
         case SoundPropagation::Method_Wave:
+        case SoundPropagation::Method_PlaneWave:
             button_show_crests_only.setEnabled(show_pressure.load());
             break;
         case SoundPropagation::Method_Pathfinding:

@@ -18,6 +18,7 @@ namespace SoundPropagation
         Method_RayCasts,
         Method_Pathfinding,
         Method_Wave,
+        Method_PlaneWave,
         Method_LOSAStarFallback,
 
         Method_Off
@@ -43,6 +44,7 @@ struct PropagationResult
     const SoundPropagation::ResultConfig config;
     float gain; // TODO: find better term. Perhaps dampening?
     float absolute;
+    float magnitude;
     int32_t wave_id;
 
     std::vector<nMath::LineSegment> intersections;
@@ -113,13 +115,30 @@ private:
 class PlannerWave : public PropagationPlanner
 {
 public:
+    enum SolutionType {
+        Wave_FreeSpace,
+        Wave_Plane,
+    };
+
+    PlannerWave() :
+        solution_type(Wave_FreeSpace)
+    {}
+
+    PlannerWave(const SolutionType _solution_type)
+    {
+        SetSolution(_solution_type);
+    }
+
     void Preprocess(std::shared_ptr<const RoomGeometry> _room) override;
     void Plan(const PropagationPlanner::SourceConfig& _config) override;
     void Simulate(PropagationResult& result, const nMath::Vector& _receiver, const float _time_ms) const override;
+
+    void SetSolution(const SolutionType _solution_type) { solution_type = _solution_type; }
 private:
     std::vector<nMath::Vector> first_reflections;
     nMath::Vector source;
     std::shared_ptr<const RoomGeometry> room;
     float frequency;
     float time_factor;
+    SolutionType solution_type;
 };

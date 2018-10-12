@@ -188,6 +188,11 @@ private:
         std::shared_ptr<PropagationPlanner> planner, 
         std::shared_ptr<RoomGeometry> room,
         const float _time, const float _zoom_factor, const bool _allow_timeout = false);
+    
+    void GenerateWaveImage(Image& _image,
+        std::shared_ptr<PropagationPlanner> planner,
+        std::shared_ptr<RoomGeometry> room,
+        const float _time, const float _zoom_factor, const bool _allow_timeout = false);
     void ExportAsImage(const File& file, const int width, const int height, const float _zoom_factor);
 
     void SetAtmosphericFilterCuttoff(const float cuttoff_frequency);

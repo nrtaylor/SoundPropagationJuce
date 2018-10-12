@@ -3,6 +3,7 @@
 #include "PropagationPlanner.h"
 #include "PropagationPlannerAStar.h"
 #include "RoomGeometry.h"
+#include "nComplex.h"
 #define _USE_MATH_DEFINES
 #include <math.h>
 #include <array>
@@ -23,6 +24,9 @@ std::shared_ptr<PropagationPlanner> PropagationPlanner::MakePlanner(const SoundP
         break;
     case SoundPropagation::Method_Wave:
         planner = std::make_shared<PlannerWave>();
+        break;
+    case SoundPropagation::Method_PlaneWave:
+        planner = std::make_shared<PlannerWave>(PlannerWave(PlannerWave::Wave_Plane));        
         break;
     case SoundPropagation::Method_LOSAStarFallback:
         planner = std::make_shared<PlannerTwoStages<PlannerDirectLOS, PlannerAStar> >();
@@ -174,7 +178,8 @@ void PlannerWave::Simulate(PropagationResult& result, const nMath::Vector& _rece
 
     float value = 0;
     float norm_value = 0.f;
-    const float distance = nMath::Length(_receiver - source);
+    const float distance = solution_type == Wave_FreeSpace ? nMath::Length(_receiver - source) :
+                            (_receiver.x - source.x);
     const float angle = 2.f * (float)M_PI * frequency; // omega
     const float time_scaled = _time_ms * time_factor / 1000.f;
 
@@ -184,8 +189,12 @@ void PlannerWave::Simulate(PropagationResult& result, const nMath::Vector& _rece
         //const float shift = angle * distance / 340.f; // k * distance
         //float value = ga * cosf(shift - angle * _time_ms)); 
         norm_value = geometric_attenuation;
-        const float wave = cosf(angle * (distance * inv_speed - time_scaled));
-        value = geometric_attenuation * wave; // TODO: Normalization on gfx side
+        const float wave = cosf(angle * (time_scaled - distance * inv_speed));
+        value = wave; // TODO: Normalization on gfx side
+        if (solution_type == Wave_FreeSpace)
+        {
+            value *= geometric_attenuation;
+        }
         result.absolute = wave;
         result.wave_id = 0;
         //value = geometric_attenuation * cosf(angle * (distance * inv_speed - time_scaled)); // TODO: Normalization on gfx side
@@ -208,7 +217,14 @@ void PlannerWave::Simulate(PropagationResult& result, const nMath::Vector& _rece
         }
         //float first_value = first_geometric_attenuation * cosf(angle * (first_distance * inv_speed - time_scaled)); // TODO: Normalization on gfx side
         norm_value += first_geometric_attenuation;
-        value += first_value;
+        if (solution_type == Wave_FreeSpace)
+        {
+            value += first_value;
+        }
+        else
+        {
+            value += wave;
+        }
     }
 
     // time independent
@@ -245,10 +261,41 @@ void PlannerWave::Simulate(PropagationResult& result, const nMath::Vector& _rece
         }
     }
 
-    const float normalize = 0.5f;
-    const float gain = 0.9f;
-    result.gain = fabsf(value);
+    //const float normalize = 0.5f;
+    const float gain = (solution_type == Wave_FreeSpace) ? 0.9f : 
+        (0.9f * 1.f/sqrt((float)first_reflections.size() + 1.f));
+    result.gain = fabsf(value) * gain;
+    result.magnitude = value;
     //result.gain = normalize * gain * (norm_value + value);
+}
+
+namespace
+{    
+    nMath::ComplexExp SteadyState(
+        const nMath::Vector& observer,
+        const float frequency,
+        const std::vector<nMath::Vector> sources)
+    {
+        const static float inv_speed = 1 / 340.f;
+        const float angle = 2.f * (float)M_PI * frequency; // omega
+        const float wave_numeber = angle * inv_speed;
+        float real_sum = 0.f;
+        float im_sum = 0.f;
+
+        for (const nMath::Vector& source : sources)
+        {
+            const float distance = nMath::Length(observer - source);
+            const float phase = distance * wave_numeber;
+            const float inv_distance = nMath::Min(1.f, 1.f / distance);
+
+            real_sum += cosf(phase) * inv_distance;
+            im_sum += sinf(phase) * inv_distance;
+        }
+
+        float amplitude = sqrtf(real_sum * real_sum + im_sum * im_sum);
+        float phase = atan2f(im_sum, real_sum);
+        return nMath::ComplexExp{ amplitude, phase };
+    }
 }
 
 template<class PlannerPrimary, class PlannerSecondary>

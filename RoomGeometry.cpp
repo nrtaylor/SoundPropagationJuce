@@ -10,6 +10,9 @@ typedef signed int int32; // TODO: PCH
 nMath::Vector MovingEmitter::Update(const signed int _elapsedMs)
 {
     angle += 2 * (float)M_PI * (_elapsedMs * frequency) / 1000.f;
+    while (angle > 2.f * (float)M_PI) {
+        angle -= 2.f * (float)M_PI;
+    }
     nMath::Vector new_position{ cosf(angle), sinf(angle), 0.f };
     pan_amount = new_position.x;
 
@@ -19,13 +22,44 @@ nMath::Vector MovingEmitter::Update(const signed int _elapsedMs)
     return emitter_pos;
 }
 
+enum PanningLaw : int {
+    PAN_LAW_TRIG_3,
+    PAN_LAW_RATIO_3,
+    PAN_LAW_LINEAR_6
+};
+
 // gain left/right should be pulled out as a process
 void MovingEmitter::ComputeGain(const float new_gain)
 {
-    // Factor such that panned hard left/right will have the same rms as pan center.
-    const float normed_loudness = new_gain * (float)M_SQRT1_2;
-    gain_left.store(normed_loudness * sqrtf(1.f - pan_amount));
-    gain_right.store(normed_loudness * sqrtf(1.f + pan_amount));
+    static const PanningLaw panning_law = PAN_LAW_LINEAR_6;
+    switch (panning_law) {
+    case PAN_LAW_TRIG_3:
+        // Factor such that panned hard left/right will have the same rms as pan center.
+    {
+        const float normed_loudness = new_gain * (float)M_SQRT1_2;
+        gain_left.store(normed_loudness * sqrtf(1.f - pan_amount));
+        gain_right.store(normed_loudness * sqrtf(1.f + pan_amount));
+    }
+    break;
+    case PAN_LAW_RATIO_3:
+    {
+        float angle_mod = angle;
+        if (angle > (float)M_PI) {
+            angle_mod = (float)M_PI - (angle_mod - floorf(angle_mod / (float)M_PI) * (float)M_PI);
+        }
+        const float theta = angle_mod / (FLT_EPSILON + (float)M_PI - angle_mod);
+        gain_left.store(new_gain * sqrtf(1 / (1 + theta*theta))*theta);
+        gain_right.store(new_gain * sqrtf(1 / (1 + theta*theta)));
+    }
+    break;
+    case PAN_LAW_LINEAR_6:
+    {
+        const float lerp_value = (1 - pan_amount) / 2.f;
+        gain_left.store(new_gain * lerp_value);
+        gain_right.store(new_gain * (1.f - lerp_value));
+    }
+    break;
+    }
 }
 
 float MovingEmitter::Gain(const signed int channel) const

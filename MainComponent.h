@@ -178,6 +178,9 @@ private:
     ComboBox combo_selected_sound;
     Label label_selected_sound;
 
+    ComboBox combo_selected_pan_law;
+    Label label_selected_pan_law;
+
     void timerCallback() override;
 
     void PaintEmitter(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const;

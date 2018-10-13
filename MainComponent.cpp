@@ -189,10 +189,12 @@ MainComponent::MainComponent() :
     { 
         const bool next_show_pressure = button_show_pressure.getToggleState();
         button_show_contours.setEnabled(next_show_pressure);
-        button_gamma_correct.setEnabled(next_show_pressure);
+        button_gamma_correct.setEnabled(next_show_pressure);        
         button_show_crests_only.setEnabled(next_show_pressure && 
             (current_method == SoundPropagation::Method_Wave ||
              current_method == SoundPropagation::Method_PlaneWave));
+        slider_time_scale.setEnabled(next_show_pressure);
+        label_time_scale.setEnabled(next_show_pressure);
         show_pressure = next_show_pressure;
     };
 
@@ -239,11 +241,13 @@ MainComponent::MainComponent() :
     slider_time_scale.setTextValueSuffix(" x");
     slider_time_scale.setValue(340.0);    
     slider_time_scale.addListener(this);
+    slider_time_scale.setEnabled(false);
     time_scale = 340.f;
 
     addAndMakeVisible(&label_time_scale);
     label_time_scale.setText("Time Stretch", dontSendNotification);
     label_time_scale.attachToComponent(&slider_time_scale, true);
+    label_time_scale.setEnabled(false);
 
     addAndMakeVisible(&group_atmosphere);
     group_atmosphere.setText("Atmosphere");
@@ -255,7 +259,17 @@ MainComponent::MainComponent() :
         SetAtmosphericFilterCuttoff(cuttoff_frequency);
     };
 
-    addAndMakeVisible(&combo_selected_sound);
+    combo_selected_pan_law.addItem("3 dB - Cosine/Sine", PanningLaw::PAN_LAW_TRIG_3);
+    combo_selected_pan_law.addItem("3 dB - Sqrt Angle Ratio", PanningLaw::PAN_LAW_RATIO_3);
+    combo_selected_pan_law.addItem("6 dB - Linear Interp", PanningLaw::PAN_LAW_LINEAR_6);
+    combo_selected_pan_law.addListener(this);
+    combo_selected_pan_law.setSelectedId(PanningLaw::PAN_LAW_TRIG_3);
+    addAndMakeVisible(&label_selected_pan_law);
+    label_selected_pan_law.setText("Pan Law", dontSendNotification);
+    label_selected_pan_law.attachToComponent(&combo_selected_pan_law, true);
+    addAndMakeVisible(&combo_selected_pan_law);
+
+    addAndMakeVisible(&combo_selected_sound);    
 
     // Make sure you set the size of the component after
     // you add any child components.
@@ -577,7 +591,7 @@ void DrawMeter(Graphics& _g, const Rectangle<int> _bounds, const float gain, con
     const float gain_db = 20.f * log10f(gain + FLT_EPSILON);
     
     _g.setFont(11);    
-    _g.drawText(juce::String::formatted((gain_db > -9.9f) ? "%.1f" : "%.0f", gain_db), meter_label.removeFromTop(12),
+    _g.drawText(juce::String::formatted((gain_db > -9.9f) ? "%.1f" : "%.0f", gain_db), meter_label.removeFromTop(14),
         juce::Justification::centred);
 
     if (label != nullptr) {
@@ -811,6 +825,7 @@ void MainComponent::resized()
     slider_gain.setBounds(frame_next());
     slider_freq.setBounds(frame_next());
     slider_radius.setBounds(frame_next());
+    combo_selected_pan_law.setBounds(frame_next());
 
     // Global
     combo_method.setBounds(frame_next());
@@ -1289,6 +1304,7 @@ void MainComponent::RefreshSourceParams()
     slider_freq.setValue(source.moving_emitter->GetFrequency());
     slider_radius.setValue(source.moving_emitter->SetRadius());
     slider_gain.setValue(source.moving_emitter->GetGlobalGain());
+    combo_selected_pan_law.setSelectedId(static_cast<int>(source.moving_emitter->GetPanLaw()), dontSendNotification);
 
     if (combo_selected_sound.getSelectedId() != static_cast<int>(source.source_type))
     {
@@ -1306,6 +1322,13 @@ void MainComponent::comboBoxChanged(ComboBox* comboBoxThatHasChanged)
             const int32 source_id = selected_source.load();
             sources[source_id].source_type = (SoundPropagationSource::SourceType)next_id;
             RefreshSourceParams();
+        }
+    }
+    else if (comboBoxThatHasChanged == &combo_selected_pan_law) {
+        const int32 next_id = combo_selected_pan_law.getSelectedId();
+        if (next_id > 0) {
+            const int32 source_id = selected_source.load();
+            sources[source_id].moving_emitter->SetPanLaw(static_cast<PanningLaw>(next_id));
         }
     }
     else if (comboBoxThatHasChanged == &combo_room ||

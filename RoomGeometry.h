@@ -9,6 +9,12 @@
 
 //typedef signed int int32; // TODO: Conflicts with Juce
 
+enum PanningLaw : int {
+    PAN_LAW_TRIG_3 = 1,
+    PAN_LAW_RATIO_3,
+    PAN_LAW_LINEAR_6
+};
+
 class MovingEmitter
 {
 public:
@@ -21,7 +27,8 @@ public:
         gain_right = 0.f;
         pan_amount = 0.f;
         global_gain = 0.8f;
-        emitter_pos = { 0.f, 0.f, 0.f };
+        pan_law = PAN_LAW_TRIG_3;
+        emitter_pos = { 0.f, 0.f, 0.f };        
     }
 
     nMath::Vector Update(const signed int _elapsedMs);
@@ -62,6 +69,16 @@ public:
         return radius.load();
     }
 
+    void SetPanLaw(const PanningLaw _pan_law)
+    {
+        pan_law.store(_pan_law);
+    }
+
+    PanningLaw GetPanLaw() const
+    {
+        return pan_law.load();
+    }
+
     void ComputeGain(const float new_gain);
 
     float Gain(const signed int channel) const;
@@ -72,6 +89,7 @@ private:
     std::atomic<float> radius;    
     std::atomic<float> gain_left;
     std::atomic<float> gain_right;
+    std::atomic<PanningLaw> pan_law;
 
     nMath::Vector emitter_pos;
     float angle;

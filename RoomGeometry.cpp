@@ -22,17 +22,10 @@ nMath::Vector MovingEmitter::Update(const signed int _elapsedMs)
     return emitter_pos;
 }
 
-enum PanningLaw : int {
-    PAN_LAW_TRIG_3,
-    PAN_LAW_RATIO_3,
-    PAN_LAW_LINEAR_6
-};
-
 // gain left/right should be pulled out as a process
 void MovingEmitter::ComputeGain(const float new_gain)
 {
-    static const PanningLaw panning_law = PAN_LAW_LINEAR_6;
-    switch (panning_law) {
+    switch (pan_law.load()) {
     case PAN_LAW_TRIG_3:
         // Factor such that panned hard left/right will have the same rms as pan center.
     {

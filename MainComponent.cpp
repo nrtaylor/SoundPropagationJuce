@@ -12,8 +12,9 @@
 #include "PropagationPlanner.h"
 #include "PropagationPlannerAStar.h"
 
-static const bool kTestingPanLaws = true;
-
+namespace SPTBModes {
+    static const bool kTestingPanLaws = true;
+}
 //#define PROFILE_SIMULATION
 
 namespace ImageHelper
@@ -543,7 +544,7 @@ void MainComponent::paint (Graphics& _g)
     const bool draw_waves = false;
 
     const Rectangle<int> bounds = _g.getClipBounds();
-    const float zoom_factor = kTestingPanLaws ? 150.f : 10.f;
+    const float zoom_factor = SPTBModes::kTestingPanLaws ? 150.f : 10.f;
     if (!draw_waves)
     {
         PaintRoom(_g, bounds, zoom_factor);    
@@ -562,7 +563,7 @@ void MainComponent::paint (Graphics& _g)
     }
 }
 
-void DrawMeter(Graphics& _g, const Rectangle<int> _bounds, const float gain, const juce::String* label = nullptr)
+void DrawMeter(Graphics& _g, const Rectangle<int> _bounds, const float gain, const char* label = nullptr)
 {
     Rectangle<int> meter_bounds = _bounds;
     Rectangle<int> meter_label = meter_bounds.removeFromBottom(32);
@@ -575,16 +576,12 @@ void DrawMeter(Graphics& _g, const Rectangle<int> _bounds, const float gain, con
 
     const float gain_db = 20.f * log10f(gain + FLT_EPSILON);
     
-    _g.setFont(11);
-    if (label == nullptr) {
-        if (gain_db > -9.9f) {
-            _g.drawText(juce::String::formatted("%.1f", gain_db), meter_label,
-                juce::Justification::centred);
-        }
-        else {
-            _g.drawText(juce::String::formatted("%.0f", gain_db), meter_label,
-                juce::Justification::centred);
-        }
+    _g.setFont(11);    
+    _g.drawText(juce::String::formatted((gain_db > -9.9f) ? "%.1f" : "%.0f", gain_db), meter_label.removeFromTop(12),
+        juce::Justification::centred);
+
+    if (label != nullptr) {
+        _g.drawText(label, meter_label, juce::Justification::centred);
     }
 
     const float gain_floor = -60.f;
@@ -598,9 +595,9 @@ void DrawMeter(Graphics& _g, const Rectangle<int> _bounds, const float gain, con
         const float gain_mark_db_ratio = db_mark_value / gain_floor;
         _g.drawText(juce::String::formatted("%.0f", -db_mark_value),
             meter_bounds.getTopLeft().x,
-            meter_bounds.getHeight() * gain_mark_db_ratio - 5,
-            meter_bounds.getWidth(),
-            8,
+            meter_bounds.getTopLeft().y + meter_bounds.getHeight() * gain_mark_db_ratio - 5,
+            meter_bounds.getWidth() - 1,
+            10,
             juce::Justification::right);
         db_mark_value -= 3.f;
     }
@@ -629,12 +626,14 @@ void MainComponent::PaintEmitter(Graphics& _g, const Rectangle<int> _bounds, con
     nMath::Vector emitter_draw_pos{ emitter_pos.x * _zoom_factor + center.x, -emitter_pos.y * _zoom_factor + center.y, 0.f };
     _g.fillEllipse(emitter_draw_pos.x - 1.f, emitter_draw_pos.y - 1.f, 2.5, 2.5);
 
-    Rectangle<int> meter_bounds = _bounds; meter_bounds.reduce(4, 4);
-    Rectangle<int> meter_right = meter_bounds.removeFromRight(24);
-    Rectangle<int> meter_left = meter_bounds.removeFromRight(24);
-
-    DrawMeter(_g, meter_right, gain_right);
-    DrawMeter(_g, meter_left, gain_left); 
+    if (SPTBModes::kTestingPanLaws) {
+        Rectangle<int> meter_bounds = _bounds; meter_bounds.reduce(4, 4);
+        
+        const float gain_rms = sqrtf((gain_right*gain_right + gain_left*gain_left) / 2.f);
+        DrawMeter(_g, meter_bounds.removeFromRight(24), gain_rms, "RMS");
+        DrawMeter(_g, meter_bounds.removeFromRight(24), gain_right, "R");
+        DrawMeter(_g, meter_bounds.removeFromRight(24), gain_left, "L");
+    }
 }
 
 void MainComponent::PaintRoom(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const
@@ -778,10 +777,12 @@ void MainComponent::resized()
     const int32 margin = 4;
 
     juce::Rectangle<int> frame = getLocalBounds();
-    const int meter_size = (24 + margin) * 2;
-    frame.removeFromRight(meter_size);
+    if (SPTBModes::kTestingPanLaws) {
+        const int meter_size = (24 + margin) * 3;
+        frame.removeFromRight(meter_size);
+    }
     frame.removeFromRight(margin);
-    frame.removeFromTop(90);
+    frame.removeFromTop(12);
     frame = frame.removeFromRight(204);
 
     auto frame_next = [&frame]() -> decltype(frame) 

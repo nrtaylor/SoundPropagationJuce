@@ -13,7 +13,7 @@
 #include "PropagationPlannerAStar.h"
 
 namespace SPTBModes {
-    static const bool kTestingPanLaws = true;
+    static const bool kTestingPanLaws = false;
 }
 //#define PROFILE_SIMULATION
 
@@ -109,8 +109,9 @@ MainComponent::MainComponent() :
         RefreshSourceParams();
     };
     const double default_emitter_gain = 0.8;
-    const double default_emitter_freq = 0.0;
+    const double default_emitter_freq = 0.0;    
     const double default_emitter_radius = 10.0;
+    const double default_emitter_spread = 0.0;
     for (int i = 0; i < 3; ++i)
     {
         button_source[i].setRadioGroupId(1001);
@@ -122,6 +123,7 @@ MainComponent::MainComponent() :
         sources[i].moving_emitter->SetGlobalGain((float)default_emitter_gain);
         sources[i].moving_emitter->SetFrequency((float)default_emitter_freq);
         sources[i].moving_emitter->SetRadius((float)default_emitter_radius);
+        sources[i].moving_emitter->SetSpread((float)default_emitter_spread);
         sources[i].source_type = SoundPropagationSource::SOURCE_OFF;
     }
 
@@ -181,6 +183,16 @@ MainComponent::MainComponent() :
     addAndMakeVisible(&label_radius);
     label_radius.setText("Radius", dontSendNotification);
     label_radius.attachToComponent(&slider_radius, true);
+
+    addAndMakeVisible(&slider_spread);
+    slider_spread.setRange(0.0, 100.0, 1.0);
+    slider_spread.setTextValueSuffix(" %");
+    slider_spread.setValue(default_emitter_spread);
+    slider_spread.addListener(this);
+
+    addAndMakeVisible(&label_spread);
+    label_spread.setText("Spread", dontSendNotification);
+    label_spread.attachToComponent(&slider_spread, true);
 
     addAndMakeVisible(&button_show_pressure);
     button_show_pressure.setButtonText("Pressure");
@@ -268,6 +280,15 @@ MainComponent::MainComponent() :
     label_selected_pan_law.setText("Pan Law", dontSendNotification);
     label_selected_pan_law.attachToComponent(&combo_selected_pan_law, true);
     addAndMakeVisible(&combo_selected_pan_law);
+
+    combo_emitter_type.addItem("Point", EmitterType::EMITTER_TYPE_POINT);
+    combo_emitter_type.addItem("Grid", EmitterType::EMITTER_TYPE_GRID);
+    combo_emitter_type.addListener(this);
+    combo_emitter_type.setSelectedId(EmitterType::EMITTER_TYPE_POINT);
+    addAndMakeVisible(&combo_emitter_type);
+    label_emitter_type.setText("Emitter", dontSendNotification);
+    label_emitter_type.attachToComponent(&combo_emitter_type, true);
+    addAndMakeVisible(&combo_emitter_type);
 
     addAndMakeVisible(&combo_selected_sound);    
 
@@ -825,7 +846,9 @@ void MainComponent::resized()
     slider_gain.setBounds(frame_next());
     slider_freq.setBounds(frame_next());
     slider_radius.setBounds(frame_next());
+    slider_spread.setBounds(frame_next());
     combo_selected_pan_law.setBounds(frame_next());
+    combo_emitter_type.setBounds(frame_next());
 
     // Global
     combo_method.setBounds(frame_next());
@@ -1272,6 +1295,9 @@ void MainComponent::sliderValueChanged(Slider* slider)
         sources[selected_source].moving_emitter->SetRadius(next_radius);
         atmospheric_component.SetDistance(next_radius, sendNotification);
     }
+    else if (slider == &slider_spread) {
+        sources[selected_source].moving_emitter->SetSpread((float)slider_spread.getValue());
+    }
 }
 
 void MainComponent::SetAtmosphericFilterCuttoff(const float cuttoff_frequency)
@@ -1302,8 +1328,9 @@ void MainComponent::RefreshSourceParams()
     }
 
     slider_freq.setValue(source.moving_emitter->GetFrequency());
-    slider_radius.setValue(source.moving_emitter->SetRadius());
+    slider_radius.setValue(source.moving_emitter->GetRadius());
     slider_gain.setValue(source.moving_emitter->GetGlobalGain());
+    slider_spread.setValue(source.moving_emitter->GetSpread());
     combo_selected_pan_law.setSelectedId(static_cast<int>(source.moving_emitter->GetPanLaw()), dontSendNotification);
 
     if (combo_selected_sound.getSelectedId() != static_cast<int>(source.source_type))
@@ -1330,6 +1357,9 @@ void MainComponent::comboBoxChanged(ComboBox* comboBoxThatHasChanged)
             const int32 source_id = selected_source.load();
             sources[source_id].moving_emitter->SetPanLaw(static_cast<PanningLaw>(next_id));
         }
+    }
+    else if (comboBoxThatHasChanged == &combo_emitter_type) {
+        // TODO: change emitter type.
     }
     else if (comboBoxThatHasChanged == &combo_room ||
              comboBoxThatHasChanged == &combo_method)

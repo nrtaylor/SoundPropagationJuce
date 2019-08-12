@@ -13,6 +13,7 @@
 #include <array>
 
 class MovingEmitter;
+class GridEmitter;
 class RoomGeometry;
 class PropagationPlanner;
 struct PropagationResult;
@@ -43,6 +44,7 @@ struct SoundPropagationSource
     SoundBuffer test_buffer;
     std::shared_ptr<PropagationPlanner> planner;
     std::shared_ptr<MovingEmitter> moving_emitter;
+    std::shared_ptr<GridEmitter> grid_emitter;
     std::atomic<SourceType> source_type;
 };
 
@@ -144,13 +146,17 @@ private:
     Label label_selected_room;
     ComboBox combo_method;
     Label label_method;
-
+    ComboBox combo_emitter_type;
+    Label label_emitter_type;
+    
     Slider slider_gain;
     Label label_gain;
     Slider slider_freq;
     Label label_freq;
     Slider slider_radius;
     Label label_radius;
+    Slider slider_spread;
+    Label label_spread;
     ToggleButton button_show_pressure;
     ToggleButton button_show_ray_casts;
     ToggleButton button_show_grid;

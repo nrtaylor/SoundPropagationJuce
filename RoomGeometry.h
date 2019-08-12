@@ -15,6 +15,11 @@ enum PanningLaw : int {
     PAN_LAW_LINEAR_6
 };
 
+enum EmitterType : int {
+    EMITTER_TYPE_POINT = 1,
+    EMITTER_TYPE_GRID,
+};
+
 class MovingEmitter
 {
 public:
@@ -64,7 +69,7 @@ public:
         return global_gain.load();
     }
 
-    float SetRadius() const
+    float GetRadius() const
     {
         return radius.load();
     }
@@ -72,6 +77,15 @@ public:
     void SetPanLaw(const PanningLaw _pan_law)
     {
         pan_law.store(_pan_law);
+    }
+
+    void SetSpread(const float _spread) {
+        spread.store(_spread);
+    }
+
+    float GetSpread() const
+    {
+        return spread.load();
     }
 
     PanningLaw GetPanLaw() const
@@ -89,11 +103,19 @@ private:
     std::atomic<float> radius;    
     std::atomic<float> gain_left;
     std::atomic<float> gain_right;
+    std::atomic<float> spread;
     std::atomic<PanningLaw> pan_law;
 
     nMath::Vector emitter_pos;
     float angle;
     float pan_amount;
+};
+
+class GridEmitter {
+public:
+    GridEmitter() {}
+private:
+    MovingEmitter point;
 };
 
 class RoomGeometry

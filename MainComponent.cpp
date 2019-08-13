@@ -14,6 +14,7 @@
 
 namespace SPTBModes {
     static const bool kTestingPanLaws = false;
+    static const bool kShowMeters = true;
 }
 //#define PROFILE_SIMULATION
 
@@ -591,7 +592,7 @@ void MainComponent::paint (Graphics& _g)
         const nMath::Vector center = ImageHelper::Center(bounds);
 
         _g.setColour(Colour::fromRGB(0xCF, 0xCF, 0xCF));
-        _g.drawLine(Line<float>(0.f, center.y, bounds.getWidth(), center.y), 0.75f);
+        _g.drawLine(Line<float>(0.f, center.y, (float)bounds.getWidth(), center.y), 0.75f);
         _g.drawLine(Line<float>(center.x, center.y - 1, center.x, center.y - bounds.getHeight()/16.f), 0.75f);
 
         _g.drawText(juce::String("x"), center.x - 11, center.y, 22, 22, juce::Justification::centred);
@@ -661,7 +662,7 @@ void MainComponent::PaintEmitter(Graphics& _g, const Rectangle<int> _bounds, con
     nMath::Vector emitter_draw_pos{ emitter_pos.x * _zoom_factor + center.x, -emitter_pos.y * _zoom_factor + center.y, 0.f };
     _g.fillEllipse(emitter_draw_pos.x - 1.f, emitter_draw_pos.y - 1.f, 2.5, 2.5);
 
-    if (SPTBModes::kTestingPanLaws) {
+    if (SPTBModes::kShowMeters) {
         Rectangle<int> meter_bounds = _bounds; meter_bounds.reduce(4, 4);
         
         const float gain_rms = sqrtf((gain_right*gain_right + gain_left*gain_left) / 2.f);
@@ -812,7 +813,7 @@ void MainComponent::resized()
     const int32 margin = 4;
 
     juce::Rectangle<int> frame = getLocalBounds();
-    if (SPTBModes::kTestingPanLaws) {
+    if (SPTBModes::kShowMeters) {
         const int meter_size = (24 + margin) * 3;
         frame.removeFromRight(meter_size);
     }

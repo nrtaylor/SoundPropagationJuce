@@ -25,13 +25,18 @@ nMath::Vector MovingEmitter::Update(const signed int _elapsedMs)
 // gain left/right should be pulled out as a process
 void MovingEmitter::ComputeGain(const float new_gain)
 {
+    float spread_pan_amount = pan_amount;
+    const float _spread = spread.load();
+    if (_spread > 0.f) {
+        spread_pan_amount *= 1.f - _spread / 100.f;
+    }
     switch (pan_law.load()) {
     case PAN_LAW_TRIG_3:
         // Factor such that panned hard left/right will have the same rms as pan center.
     {
         const float normed_loudness = new_gain * (float)M_SQRT1_2;
-        gain_left.store(normed_loudness * sqrtf(1.f - pan_amount));
-        gain_right.store(normed_loudness * sqrtf(1.f + pan_amount));
+        gain_left.store(normed_loudness * sqrtf(1.f - spread_pan_amount));
+        gain_right.store(normed_loudness * sqrtf(1.f + spread_pan_amount));
     }
     break;
     case PAN_LAW_RATIO_3:
@@ -47,7 +52,7 @@ void MovingEmitter::ComputeGain(const float new_gain)
     break;
     case PAN_LAW_LINEAR_6:
     {
-        const float lerp_value = (1 - pan_amount) / 2.f;
+        const float lerp_value = (1 - spread_pan_amount) / 2.f;
         gain_left.store(new_gain * lerp_value);
         gain_right.store(new_gain * (1.f - lerp_value));
     }

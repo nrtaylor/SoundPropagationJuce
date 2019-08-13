@@ -73,6 +73,17 @@ float MovingEmitter::Gain(const signed int channel) const
     }
 }
 
+void GridEmitter::GridOn(const nMath::Vector& position) {
+    const int grid_half = (int)GridResolution / 2;
+    const nMath::Vector grid_position = position * (float)GridCellsPerMeter +
+        nMath::Vector{ (float)grid_half, (float)grid_half };
+    const int grid_x = (int)grid_position.x;
+    const int grid_y = (int)grid_position.y;
+    if (grid_x >= 0 && grid_x < GridResolution && grid_y >= 0 && grid_y < GridResolution) {
+        grid[grid_y][grid_x] = true;
+    }
+}
+
 RoomGeometry::RoomGeometry() :
         bounding_box{ {},{} }
 {

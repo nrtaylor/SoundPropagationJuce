@@ -125,7 +125,9 @@ MainComponent::MainComponent() :
         sources[i].moving_emitter->SetFrequency((float)default_emitter_freq);
         sources[i].moving_emitter->SetRadius((float)default_emitter_radius);
         sources[i].moving_emitter->SetSpread((float)default_emitter_spread);
+        sources[i].grid_emitter = std::make_shared<GridEmitter>();
         sources[i].source_type = SoundPropagationSource::SOURCE_OFF;
+        sources[i].emitter_type = EmitterType::EMITTER_TYPE_POINT;
     }
 
     button_loadfile.setButtonText("...");
@@ -583,6 +585,7 @@ void MainComponent::paint (Graphics& _g)
     const float zoom_factor = SPTBModes::kTestingPanLaws ? 150.f : 10.f;
     if (!draw_waves)
     {
+        PaintGridEmitter(_g, bounds, zoom_factor);        
         PaintRoom(_g, bounds, zoom_factor);    
         PaintSimulation(_g, bounds, zoom_factor);
         PaintEmitter(_g, bounds, zoom_factor);
@@ -593,9 +596,9 @@ void MainComponent::paint (Graphics& _g)
 
         _g.setColour(Colour::fromRGB(0xCF, 0xCF, 0xCF));
         _g.drawLine(Line<float>(0.f, center.y, (float)bounds.getWidth(), center.y), 0.75f);
-        _g.drawLine(Line<float>(center.x, center.y - 1, center.x, center.y - bounds.getHeight()/16.f), 0.75f);
+        _g.drawLine(Line<float>(center.x, center.y - 1.f, center.x, center.y - bounds.getHeight()/16.f), 0.75f);
 
-        _g.drawText(juce::String("x"), center.x - 11, center.y, 22, 22, juce::Justification::centred);
+        _g.drawText(juce::String("x"), (int)center.x - 11, (int)center.y, 22, 22, juce::Justification::centred);
     }
 }
 
@@ -640,6 +643,36 @@ void DrawMeter(Graphics& _g, const Rectangle<int> _bounds, const float gain, con
 
     _g.setColour(Colour::fromRGBA(0xFF, 0xFF, 0xFF, 0x80));
     _g.fillRect(meter_bounds.removeFromBottom(meter_bounds.getHeight() * gain_db_ratio));    
+}
+
+void MainComponent::PaintGridEmitter(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const {
+    std::shared_ptr<const GridEmitter> grid_emitter = nullptr;
+    {
+        std::lock_guard<std::mutex> guard(*mutex_emitter_update);
+        if (sources[selected_source].emitter_type != EmitterType::EMITTER_TYPE_GRID) {
+            return;
+        }
+        grid_emitter = sources[selected_source].grid_emitter;
+    }
+    const GridEmitter::GeometryGrid& grid = grid_emitter->Grid();
+    const float min_extent = (float)nMath::Min(_bounds.getWidth(), _bounds.getHeight());
+    _g.setColour(Colour::fromRGBA(0x77, 0x77, 0x77, 0x99));
+    const int offset = (int)(min_extent / 2.f - _zoom_factor * PlannerAStar::GridDistance / 2);
+    const int cellSize = (int)_zoom_factor / PlannerAStar::GridCellsPerMeter;
+    for (int i = 0; i < GridEmitter::GridResolution; ++i)
+    {
+        for (int j = 0; j < GridEmitter::GridResolution; ++j)
+        {
+            if (grid[i][j])
+            {
+                _g.drawRect(
+                    cellSize * j + offset,
+                    cellSize * (PlannerAStar::GridResolution - i - 1) + offset,
+                    cellSize - 1,
+                    cellSize - 1);
+            }
+        }
+    }
 }
 
 void MainComponent::PaintEmitter(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const
@@ -900,8 +933,25 @@ void MainComponent::mouseDown(const MouseEvent& event)
     if (event.getMouseDownX() < min_extent &&
         event.getMouseDownY() < min_extent)
     {
-        receiver_x = event.getMouseDownX();
-        receiver_y = event.getMouseDownY();
+        if (!event.mods.isShiftDown()) {
+            receiver_x = event.getMouseDownX();
+            receiver_y = event.getMouseDownY();
+        }
+        else {
+            // TODO: consolidate getting grid emitter
+            std::lock_guard<std::mutex> guard(*mutex_emitter_update);
+            if (sources[selected_source].emitter_type != EmitterType::EMITTER_TYPE_GRID) {
+                return;
+            }
+            std::shared_ptr<GridEmitter> grid_emitter = sources[selected_source].grid_emitter;
+            const int x = event.getMouseDownX();
+            const int y = event.getMouseDownY();
+            // TODO: Call in update thread?
+            const nMath::Vector center = ImageHelper::Center(getBounds());
+            const float inv_zoom_factor = 1.f / 10.f;
+            const nMath::Vector position = { (x - center.x) * inv_zoom_factor , (y - center.y) * -inv_zoom_factor, 0.f };
+            grid_emitter->GridOn(position);
+        }
     }
 }
 
@@ -1360,7 +1410,12 @@ void MainComponent::comboBoxChanged(ComboBox* comboBoxThatHasChanged)
         }
     }
     else if (comboBoxThatHasChanged == &combo_emitter_type) {
-        // TODO: change emitter type.
+        const int32 next_id = combo_emitter_type.getSelectedId();
+        if (next_id > 0)
+        {
+            const int32 source_id = selected_source.load();
+            sources[source_id].emitter_type = (EmitterType)next_id;
+        }
     }
     else if (comboBoxThatHasChanged == &combo_room ||
              comboBoxThatHasChanged == &combo_method)

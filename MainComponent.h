@@ -14,6 +14,7 @@
 
 class MovingEmitter;
 class GridEmitter;
+enum EmitterType : int32;
 class RoomGeometry;
 class PropagationPlanner;
 struct PropagationResult;
@@ -46,6 +47,7 @@ struct SoundPropagationSource
     std::shared_ptr<MovingEmitter> moving_emitter;
     std::shared_ptr<GridEmitter> grid_emitter;
     std::atomic<SourceType> source_type;
+    std::atomic<EmitterType> emitter_type;
 };
 
 //==============================================================================
@@ -189,6 +191,7 @@ private:
 
     void timerCallback() override;
 
+    void PaintGridEmitter(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const;
     void PaintEmitter(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const;
     void PaintRoom(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const;
     void PaintSimulation(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor);

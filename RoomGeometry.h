@@ -6,6 +6,7 @@
 #include <atomic>
 #include <memory>
 #include <vector>
+#include <array>
 
 //typedef signed int int32; // TODO: Conflicts with Juce
 
@@ -113,9 +114,28 @@ private:
 
 class GridEmitter {
 public:
-    GridEmitter() {}
+    const static uint32_t GridDistance = 60; // meters    
+    const static uint32_t GridCellsPerMeter = 2;
+    const static uint32_t GridResolution = GridCellsPerMeter * GridDistance;
+    using GeometryGrid = std::array<std::array<bool, GridResolution>, GridResolution>;
+
+    GridEmitter() {
+        for (auto& row : grid) {
+            row.fill(false);
+        }
+        grid[30][30] = true;
+        grid[30][31] = true;
+        grid[30][32] = true;
+        grid[41][40] = true;
+        grid[42][40] = true;
+        grid[44][40] = true;
+    }
+
+    void GridOn(const nMath::Vector& position);
+    const GeometryGrid& Grid() const { return grid; }
 private:
     MovingEmitter point;
+    GeometryGrid grid;
 };
 
 class RoomGeometry

@@ -31,17 +31,22 @@ public:
     {
         gain_left = 0.f;
         gain_right = 0.f;
-        pan_amount = 0.f;
         global_gain = 0.8f;
         pan_law = PAN_LAW_TRIG_3;
         emitter_pos = { 0.f, 0.f, 0.f };        
     }
 
+    // Not thread safe. Lock emitter first.
     nMath::Vector Update(const signed int _elapsedMs);
 
     nMath::Vector GetPosition() const
     {
         return emitter_pos;
+    }
+
+    void SetPosition(const nMath::Vector& position)
+    {
+        emitter_pos = position;
     }
 
     // The following should be thread safe.
@@ -94,7 +99,7 @@ public:
         return pan_law.load();
     }
 
-    void ComputeGain(const float new_gain);
+    void ComputeGain(const nMath::Vector& receiver_pos, const float new_gain);
 
     float Gain(const signed int channel) const;
 
@@ -109,7 +114,6 @@ private:
 
     nMath::Vector emitter_pos;
     float angle;
-    float pan_amount;
 };
 
 class GridEmitter {
@@ -133,6 +137,8 @@ public:
 
     void GridOn(const nMath::Vector& position);
     const GeometryGrid& Grid() const { return grid; }
+    const MovingEmitter& Point() const { return point; }
+    void Update(const nMath::Vector& receiver_pos);
 private:
     MovingEmitter point;
     GeometryGrid grid;

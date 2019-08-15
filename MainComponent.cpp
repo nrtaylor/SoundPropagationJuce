@@ -634,8 +634,8 @@ void DrawMeter(Graphics& _g, const Rectangle<int> _bounds, const float gain, con
         const float gain_mark_db_ratio = db_mark_value / gain_floor;
         _g.drawText(juce::String::formatted("%.0f", -db_mark_value),
             meter_bounds.getTopLeft().x,
-            meter_bounds.getTopLeft().y + meter_bounds.getHeight() * gain_mark_db_ratio - 5,
-            meter_bounds.getWidth() - 1,
+            (int)(meter_bounds.getTopLeft().y + meter_bounds.getHeight() * gain_mark_db_ratio - 5.f),
+            (int)(meter_bounds.getWidth() - 1.f),
             10,
             juce::Justification::right);
         db_mark_value -= 3.f;
@@ -673,6 +673,12 @@ void MainComponent::PaintGridEmitter(Graphics& _g, const Rectangle<int> _bounds,
             }
         }
     }
+
+    _g.setColour(Colour::fromRGB(0xFF, 0xFF, 0xFF));
+    const nMath::Vector center = ImageHelper::Center(_bounds);
+    const nMath::Vector emitter_pos = grid_emitter->Point().GetPosition();
+    nMath::Vector emitter_draw_pos{ emitter_pos.x * _zoom_factor + center.x, -emitter_pos.y * _zoom_factor + center.y, 0.f };
+    _g.fillEllipse(emitter_draw_pos.x - 1.f, emitter_draw_pos.y - 1.f, 2.5, 2.5);
 }
 
 void MainComponent::PaintEmitter(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const
@@ -687,7 +693,10 @@ void MainComponent::PaintEmitter(Graphics& _g, const Rectangle<int> _bounds, con
     nMath::Vector emitter_pos;
     {
         std::lock_guard<std::mutex> guard(*mutex_emitter_update);
-        const MovingEmitter& moving_emitter = *sources[selected_source].moving_emitter;
+        if (sources[selected_source].emitter_type != EmitterType::EMITTER_TYPE_POINT) {
+            return;
+        }
+        const MovingEmitter& moving_emitter = *sources[selected_source].moving_emitter;        
         emitter_pos = moving_emitter.GetPosition();
         gain_left = moving_emitter.Gain(0);
         gain_right = moving_emitter.Gain(1);
@@ -1223,6 +1232,11 @@ void MainComponent::GenerateSPLImage(Image& _image,
 void MainComponent::update()
 {
     int32 frame_time = Time::getMillisecondCounter();
+
+    const nMath::Vector center = ImageHelper::Center(getBounds());
+    const float inv_zoom_factor = 1.f / 10.f;
+    const nMath::Vector receiever_pos = { (receiver_x - center.x) * inv_zoom_factor , (receiver_y - center.y) * -inv_zoom_factor, 0.f };
+
     SoundPropagationSource& source = sources[selected_source];
     std::shared_ptr<PropagationPlanner> planner = source.planner;
     std::shared_ptr<MovingEmitter> moving_emitter = source.moving_emitter;
@@ -1235,15 +1249,12 @@ void MainComponent::update()
 #else
         emitter_pos = moving_emitter->Update(0);
 #endif
+        source.grid_emitter->Update(receiever_pos);
     }        
     std::shared_ptr<RoomGeometry> room = current_room; // this isn't guarunteed atomic
     const float time_now = (float)(Time::currentTimeMillis() % ((1 + (int)test_frequency) * 1000));// TODO: start at t = 0 or store in planner.
     if (room != nullptr)
     {
-        const nMath::Vector center = ImageHelper::Center(getBounds());
-        const float inv_zoom_factor = 1.f/10.f;
-        const nMath::Vector receiever_pos = { (receiver_x - center.x) * inv_zoom_factor , (receiver_y - center.y) * -inv_zoom_factor, 0.f};
-
         const PropagationPlanner::SourceConfig planner_config = {
             emitter_pos,
             test_frequency.load(),
@@ -1279,7 +1290,7 @@ void MainComponent::update()
         ++write_index;        
 
         const float simulated_gain = simulation_result.object.result->gain;
-        moving_emitter->ComputeGain(simulated_gain);
+        moving_emitter->ComputeGain(receiever_pos, simulated_gain);
     }
     
     if (show_pressure.load() &&        

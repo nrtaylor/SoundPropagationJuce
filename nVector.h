@@ -40,6 +40,11 @@ namespace nMath
     };
 
     // Helper functions
+    inline bool operator== (const Vector& lhs, const Vector& rhs)
+    {
+        return lhs.x == rhs.x && lhs.y == rhs.y && lhs.z == rhs.z;
+    }
+
     inline float Dot(const Vector& lhs, const Vector& rhs)
     {
         return lhs.x*rhs.x + lhs.y*rhs.y + lhs.z*rhs.z;
@@ -49,6 +54,12 @@ namespace nMath
     {
         Vector v = { lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z };
         return v;
+    }
+
+    inline Vector operator+= (Vector& lhs, const Vector& rhs)
+    {
+        lhs = { lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z };
+        return lhs;
     }
 
     inline Vector operator- (const Vector& lhs, const Vector& rhs)

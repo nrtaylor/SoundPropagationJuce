@@ -642,7 +642,7 @@ void DrawMeter(Graphics& _g, const Rectangle<int> _bounds, const float gain, con
     }
 
     _g.setColour(Colour::fromRGBA(0xFF, 0xFF, 0xFF, 0x80));
-    _g.fillRect(meter_bounds.removeFromBottom(meter_bounds.getHeight() * gain_db_ratio));    
+    _g.fillRect(meter_bounds.removeFromBottom((int)(meter_bounds.getHeight() * gain_db_ratio)));
 }
 
 void MainComponent::PaintGridEmitter(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const {
@@ -679,6 +679,10 @@ void MainComponent::PaintGridEmitter(Graphics& _g, const Rectangle<int> _bounds,
     const nMath::Vector emitter_pos = grid_emitter->Point().GetPosition();
     nMath::Vector emitter_draw_pos{ emitter_pos.x * _zoom_factor + center.x, -emitter_pos.y * _zoom_factor + center.y, 0.f };
     _g.fillEllipse(emitter_draw_pos.x - 1.f, emitter_draw_pos.y - 1.f, 2.5, 2.5);
+
+    const float attenuation_range = 20.f * _zoom_factor;
+    _g.drawEllipse(receiver_x - attenuation_range, receiver_y - attenuation_range,
+        2.f * attenuation_range, 2.f * attenuation_range, 1.f);
 }
 
 void MainComponent::PaintEmitter(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const

@@ -18,6 +18,14 @@ namespace SPTBModes {
 }
 //#define PROFILE_SIMULATION
 
+constexpr float DefaultZoomFactor() {
+    return SPTBModes::kTestingPanLaws ? 150.f : 15.f;
+}
+
+constexpr float DefaultZoomFactorPixel() {
+    return DefaultZoomFactor() / 10.f;
+}
+
 namespace ImageHelper
 {
     Image SquareImage(const Rectangle<int>& bounds)
@@ -573,7 +581,7 @@ void MainComponent::paint (Graphics& _g)
     const bool draw_waves = false;
 
     const Rectangle<int> bounds = _g.getClipBounds();
-    const float zoom_factor = SPTBModes::kTestingPanLaws ? 150.f : 10.f;
+    const float zoom_factor = DefaultZoomFactor();
     if (!draw_waves)
     {
         PaintRoom(_g, bounds, zoom_factor);    
@@ -647,8 +655,8 @@ void MainComponent::PaintGridEmitterSimulation(Graphics& _g, const Rectangle<int
         const GridEmitter::GeometryGrid& grid = grid_planner->GetGridEmitter()->Grid();
         const float min_extent = (float)nMath::Min(_bounds.getWidth(), _bounds.getHeight());
         _g.setColour(Colour::fromRGBA(0x77, 0x77, 0x77, 0x99));
-        const int offset = (int)(min_extent / 2.f - _zoom_factor * PlannerAStar::GridDistance / 2);
-        const int cellSize = (int)_zoom_factor / PlannerAStar::GridCellsPerMeter;
+        const int offset = (int)(min_extent / 2.f - _zoom_factor * GridEmitter::GridDistance / 2);
+        const int cellSize = (int)_zoom_factor / GridEmitter::GridCellsPerMeter;
         for (int i = 0; i < GridEmitter::GridResolution; ++i)
         {
             for (int j = 0; j < GridEmitter::GridResolution; ++j)
@@ -941,7 +949,7 @@ void MainComponent::mouseDown(const MouseEvent& event)
             const int x = event.getMouseDownX();
             const int y = event.getMouseDownY();            
             const nMath::Vector center = ImageHelper::Center(getBounds());
-            const float inv_zoom_factor = 1.f / 10.f;
+            const float inv_zoom_factor = 1.f / DefaultZoomFactor();
             const nMath::Vector position = { (x - center.x) * inv_zoom_factor , (y - center.y) * -inv_zoom_factor, 0.f };
             grid_emitter->GridOn(position);
         }
@@ -1097,11 +1105,11 @@ void MainComponent::GenerateSPLImage(Image& _image,
     std::shared_ptr<PropagationPlanner> planner, 
     std::shared_ptr<RoomGeometry> room, 
     const float _time,
-    const float _zoom_factor,
+    const float _zoom_factor_pixel,
     const bool _allow_timeout)
 {
     const nMath::Vector center{ _image.getWidth() / 2.f, _image.getWidth() / 2.f, 0.f };
-    const float inv_zoom_factor = 1.f / (_zoom_factor * 10.f);
+    const float inv_zoom_factor = 1.f / (_zoom_factor_pixel * 10.f);
 
     const bool overlay_contours = show_contours.load();
     const bool filter_crests = show_crests_only.load();
@@ -1218,7 +1226,7 @@ void MainComponent::update()
     int32 frame_time = Time::getMillisecondCounter();
 
     const nMath::Vector center = ImageHelper::Center(getBounds());
-    const float inv_zoom_factor = 1.f / 10.f;
+    const float inv_zoom_factor = 1.f / DefaultZoomFactor();
     const nMath::Vector receiever_pos = { (receiver_x - center.x) * inv_zoom_factor , (receiver_y - center.y) * -inv_zoom_factor, 0.f };
 
     SoundPropagationSource& source = sources[selected_source];
@@ -1299,11 +1307,11 @@ void MainComponent::update()
                 std::lock_guard<std::mutex> guard(mutex_image);
                 if (!show_wave)
                 {
-                    GenerateSPLImage(image_next, planner, room, time_now, 1.f, true);
+                    GenerateSPLImage(image_next, planner, room, time_now, DefaultZoomFactorPixel(), true);
                 }
                 else
                 {
-                    GenerateWaveImage(image_next, planner, room, time_now, 1.f, true);
+                    GenerateWaveImage(image_next, planner, room, time_now, DefaultZoomFactorPixel(), true);
                 }
                 flag_update_working.store(false);
                 flag_refresh_image.store(true);

@@ -114,7 +114,7 @@ private:
 class GridEmitter {
 public:
     const static uint32_t GridDistance = 60; // meters    
-    const static uint32_t GridCellsPerMeter = 2;
+    const static uint32_t GridCellsPerMeter = 1;
     const static uint32_t GridResolution = GridCellsPerMeter * GridDistance;
     using GeometryGrid = std::array<std::array<bool, GridResolution>, GridResolution>;
 
@@ -122,12 +122,12 @@ public:
         for (auto& row : grid) {
             row.fill(false);
         }
-        grid[30][30] = true;
-        grid[30][31] = true;
-        grid[30][32] = true;
-        grid[41][40] = true;
-        grid[42][40] = true;
-        grid[44][40] = true;
+        grid[15][16] = true;
+        grid[15][16] = true;
+        grid[15][15] = true;
+        grid[41][20] = true;
+        grid[42][20] = true;
+        grid[44][20] = true;
     }
 
     void GridOn(const nMath::Vector& position);

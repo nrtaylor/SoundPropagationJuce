@@ -7,6 +7,7 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
 #include <array>
+#include <assert.h>
 
 std::shared_ptr<PropagationPlanner> PropagationPlanner::MakePlanner(const SoundPropagation::MethodType method)
 {
@@ -30,6 +31,9 @@ std::shared_ptr<PropagationPlanner> PropagationPlanner::MakePlanner(const SoundP
         break;
     case SoundPropagation::Method_LOSAStarFallback:
         planner = std::make_shared<PlannerTwoStages<PlannerDirectLOS, PlannerAStar> >();
+        break;
+    case SoundPropagation::Method_GridEmitter:
+        planner = std::make_shared<PlannerGridEmitter>();
         break;
     default:
         break;
@@ -327,4 +331,72 @@ void PlannerTwoStages<PlannerPrimary, PlannerSecondary>::Simulate(PropagationRes
     {
         planner_secondary->Simulate(result, _receiver, _time_ms);
     }
+}
+
+// Grid Emmiter
+void PlannerGridEmitter::Preprocess(std::shared_ptr<const RoomGeometry> _room) {
+    _room;
+}
+
+void PlannerGridEmitter::Plan(const PropagationPlanner::SourceConfig& _config) {
+    grid_emitter = _config.grid_emitter;
+}
+
+void PlannerGridEmitter::Simulate(PropagationResult& result, const nMath::Vector& _receiver, const float _time_ms) const {
+    _time_ms;
+    const float attenuation_range = 20.f;
+    assert(grid_emitter != nullptr);
+    if (grid_emitter == nullptr) {        
+        return;
+    }
+    const GridEmitter::GeometryGrid& grid = grid_emitter->Grid();
+
+    const float half_grid_cell_size = 0.5f / (float)GridEmitter::GridCellsPerMeter;    
+
+    float total_weight = 0.0;
+    float spread = 0.f;
+    float closest_distance = FLT_MAX;
+    nMath::Vector total_dir = { 0.0, 0.0, 0.0 };
+    nMath::Vector emitter_direction = { 0.0, 0.0, 0.0 };
+
+    // TODO: Track closest point.
+    for (int x = 0; x < GridEmitter::GridResolution; ++x) {
+        for (int y = 0; y < GridEmitter::GridResolution; ++y) {
+            if (grid[y][x]) {
+                nMath::Vector grid_cell_center = { half_grid_cell_size + x / (float)GridEmitter::GridCellsPerMeter,
+                    half_grid_cell_size + y / (float)GridEmitter::GridCellsPerMeter, 0.f };
+                grid_cell_center.x -= GridEmitter::GridDistance / 2.f;
+                grid_cell_center.y -= GridEmitter::GridDistance / 2.f;
+                const nMath::Vector direction = grid_cell_center - _receiver;
+                if (fabs(direction.x) < half_grid_cell_size &&
+                    fabs(direction.y) < half_grid_cell_size &&
+                    fabs(direction.z) < half_grid_cell_size)
+                {
+                    spread = 1.0;
+                    emitter_direction = { 0.001f, 0.0, 0.0 };
+                    closest_distance = 0.f;
+                    break;
+                }
+                const float distance = nMath::Length(direction);
+                if (distance < attenuation_range)
+                {
+                    if (distance < closest_distance) {
+                        closest_distance = distance;
+                    }
+                    const float weight = attenuation_range - distance;
+                    total_dir += (weight / distance) * direction;
+                    total_weight += weight;
+                }
+            }
+        }
+    }
+
+    if (total_weight > 0.f && emitter_direction == nMath::Vector{ 0.f,0.f,0.f }) {
+        spread = 1 - nMath::Length(total_dir) / total_weight;
+        emitter_direction = closest_distance * total_dir / nMath::Length(total_dir);        
+    }
+    emitter_direction += _receiver;
+    result.emitter_direction = emitter_direction;
+    result.spread = spread;
+    result.gain = nMath::Max(0.f, (attenuation_range - closest_distance) / attenuation_range);
 }

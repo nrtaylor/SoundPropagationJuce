@@ -7,8 +7,11 @@
 #include <atomic>
 #include <memory>
 #include <vector>
+#include <array>
 
 class PropagationPlanner;
+class RoomGeometry;
+class GridEmitter;
 
 namespace SoundPropagation
 {
@@ -20,6 +23,7 @@ namespace SoundPropagation
         Method_Wave,
         Method_PlaneWave,
         Method_LOSAStarFallback,
+        Method_GridEmitter,
 
         Method_Off
     };
@@ -32,8 +36,6 @@ namespace SoundPropagation
     };
 }
 
-class RoomGeometry;
-
 struct PropagationSimulationCache
 {
     virtual ~PropagationSimulationCache() = default;
@@ -45,7 +47,9 @@ struct PropagationResult
     float gain; // TODO: find better term. Perhaps dampening?
     float absolute;
     float magnitude;
+    float spread;
     int32_t wave_id;
+    nMath::Vector emitter_direction;
 
     std::vector<nMath::LineSegment> intersections;
     std::shared_ptr<PropagationSimulationCache> cache;
@@ -60,6 +64,7 @@ public:
     struct SourceConfig
     {
         const nMath::Vector source;
+        const std::shared_ptr<GridEmitter> grid_emitter;
         const float frequency;
         const float time_scale;
     };
@@ -77,6 +82,23 @@ public:
 private:
     nMath::Vector source;
     std::shared_ptr<const RoomGeometry> room;
+};
+
+class PlannerGridEmitter : public PropagationPlanner
+{
+public:
+    PlannerGridEmitter() {}
+
+    // Planner
+    void Preprocess(std::shared_ptr<const RoomGeometry> _room) override;
+    void Plan(const PropagationPlanner::SourceConfig& _config) override;
+    void Simulate(PropagationResult& result, const nMath::Vector& _receiver, const float _time_ms) const override;
+
+    const std::shared_ptr<GridEmitter> GetGridEmitter() const { 
+        return grid_emitter;
+    }
+private:
+    std::shared_ptr<GridEmitter> grid_emitter;
 };
 
 class PlannerRayCasts : public PropagationPlanner

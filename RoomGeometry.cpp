@@ -74,57 +74,6 @@ float MovingEmitter::Gain(const signed int channel) const
     }
 }
 
-void GridEmitter::Update(const nMath::Vector& receiver_pos) {
-    const float half_grid_cell_size = 0.5f / (float)GridCellsPerMeter;
-
-    const float attenuation_range = 20.f;
-
-    float total_weight = 0.0;
-    float spread = 0.f;
-    float closest_distance = FLT_MAX;
-    nMath::Vector total_dir = { 0.0, 0.0, 0.0 };
-    nMath::Vector emitter_direction = { 0.0, 0.0, 0.0 };
-
-    // TODO: Track closest point.
-    for (int x = 0; x < GridResolution; ++x) {
-        for (int y = 0; y < GridResolution; ++y) {
-            if (grid[y][x]) {                
-                nMath::Vector grid_cell_center = { half_grid_cell_size + x / (float)GridCellsPerMeter,
-                    half_grid_cell_size + y / (float)GridCellsPerMeter, 0.f};
-                grid_cell_center.x -= GridDistance / 2.f;
-                grid_cell_center.y -= GridDistance / 2.f;
-                const nMath::Vector direction = grid_cell_center - receiver_pos;
-                if (fabs(direction.x) < half_grid_cell_size &&
-                    fabs(direction.y) < half_grid_cell_size &&
-                    fabs(direction.z) < half_grid_cell_size)
-                {
-                    spread = 1.0;
-                    emitter_direction = { 0.001f, 0.0, 0.0 };
-                    break;
-                }            
-                const float distance = nMath::Length(direction);                
-                if (distance < attenuation_range)
-                {
-                    if (distance < closest_distance) {
-                        closest_distance = distance;
-                    }
-                    const float weight = attenuation_range - distance;
-                    total_dir += (weight / distance) * direction;
-                    total_weight += weight;
-                }
-            }
-        }
-    }
-
-    if (total_weight > 0.f && emitter_direction == nMath::Vector{ 0.f,0.f,0.f }) {
-        spread = 1 - nMath::Length(total_dir) / total_weight;
-        emitter_direction = closest_distance * total_dir / nMath::Length(total_dir);
-        emitter_direction += receiver_pos;
-    }    
-    point.SetPosition(emitter_direction);
-    point.SetSpread(spread);
-}
-
 void GridEmitter::GridOn(const nMath::Vector& position) {
     const int grid_half = (int)GridResolution / 2;
     const nMath::Vector grid_position = position * (float)GridCellsPerMeter +

@@ -16,11 +16,6 @@ enum PanningLaw : int {
     PAN_LAW_LINEAR_6
 };
 
-enum EmitterType : int {
-    EMITTER_TYPE_POINT = 1,
-    EMITTER_TYPE_GRID,
-};
-
 class MovingEmitter
 {
 public:
@@ -137,10 +132,7 @@ public:
 
     void GridOn(const nMath::Vector& position);
     const GeometryGrid& Grid() const { return grid; }
-    const MovingEmitter& Point() const { return point; }
-    void Update(const nMath::Vector& receiver_pos);
 private:
-    MovingEmitter point;
     GeometryGrid grid;
 };
 

@@ -127,7 +127,6 @@ MainComponent::MainComponent() :
         sources[i].moving_emitter->SetSpread((float)default_emitter_spread);
         sources[i].grid_emitter = std::make_shared<GridEmitter>();
         sources[i].source_type = SoundPropagationSource::SOURCE_OFF;
-        sources[i].emitter_type = EmitterType::EMITTER_TYPE_POINT;
     }
 
     button_loadfile.setButtonText("...");
@@ -283,15 +282,6 @@ MainComponent::MainComponent() :
     label_selected_pan_law.setText("Pan Law", dontSendNotification);
     label_selected_pan_law.attachToComponent(&combo_selected_pan_law, true);
     addAndMakeVisible(&combo_selected_pan_law);
-
-    combo_emitter_type.addItem("Point", EmitterType::EMITTER_TYPE_POINT);
-    combo_emitter_type.addItem("Grid", EmitterType::EMITTER_TYPE_GRID);
-    combo_emitter_type.addListener(this);
-    combo_emitter_type.setSelectedId(EmitterType::EMITTER_TYPE_POINT);
-    addAndMakeVisible(&combo_emitter_type);
-    label_emitter_type.setText("Emitter", dontSendNotification);
-    label_emitter_type.attachToComponent(&combo_emitter_type, true);
-    addAndMakeVisible(&combo_emitter_type);
 
     addAndMakeVisible(&combo_selected_sound);    
 
@@ -488,6 +478,7 @@ MainComponent::MainComponent() :
     combo_method.addItem("LOS then A*", SoundPropagation::Method_LOSAStarFallback);
     combo_method.addItem("Waves", SoundPropagation::Method_Wave);
     combo_method.addItem("Plane Waves", SoundPropagation::Method_PlaneWave);
+    combo_method.addItem("Grid Emitter", SoundPropagation::Method_GridEmitter);
     current_method = SoundPropagation::Method_DirectLOS;
     combo_method.setSelectedId(SoundPropagation::Method_DirectLOS);
 
@@ -585,9 +576,11 @@ void MainComponent::paint (Graphics& _g)
     const float zoom_factor = SPTBModes::kTestingPanLaws ? 150.f : 10.f;
     if (!draw_waves)
     {
-        PaintGridEmitter(_g, bounds, zoom_factor);        
         PaintRoom(_g, bounds, zoom_factor);    
         PaintSimulation(_g, bounds, zoom_factor);
+        if (current_method == SoundPropagation::Method_GridEmitter) {
+            PaintGridEmitterSimulation(_g, bounds, zoom_factor);
+        }
         PaintEmitter(_g, bounds, zoom_factor);
     }
     else
@@ -645,41 +638,36 @@ void DrawMeter(Graphics& _g, const Rectangle<int> _bounds, const float gain, con
     _g.fillRect(meter_bounds.removeFromBottom((int)(meter_bounds.getHeight() * gain_db_ratio)));
 }
 
-void MainComponent::PaintGridEmitter(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const {
-    std::shared_ptr<const GridEmitter> grid_emitter = nullptr;
-    {
-        std::lock_guard<std::mutex> guard(*mutex_emitter_update);
-        if (sources[selected_source].emitter_type != EmitterType::EMITTER_TYPE_GRID) {
-            return;
-        }
-        grid_emitter = sources[selected_source].grid_emitter;
-    }
-    const GridEmitter::GeometryGrid& grid = grid_emitter->Grid();
-    const float min_extent = (float)nMath::Min(_bounds.getWidth(), _bounds.getHeight());
-    _g.setColour(Colour::fromRGBA(0x77, 0x77, 0x77, 0x99));
-    const int offset = (int)(min_extent / 2.f - _zoom_factor * PlannerAStar::GridDistance / 2);
-    const int cellSize = (int)_zoom_factor / PlannerAStar::GridCellsPerMeter;
-    for (int i = 0; i < GridEmitter::GridResolution; ++i)
-    {
-        for (int j = 0; j < GridEmitter::GridResolution; ++j)
+void MainComponent::PaintGridEmitterSimulation(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) {
+    ReadWriteControl rw = RW_NONE;
+    const uint32 current_read_index = read_index;
+    if (simulation_results[current_read_index].lock.compare_exchange_strong(rw, RW_READING)) {        
+        std::shared_ptr<const PropagationPlanner> planner = simulation_results[current_read_index].object.planner;
+        std::shared_ptr<const PlannerGridEmitter> grid_planner = std::dynamic_pointer_cast<const PlannerGridEmitter>(planner);        
+        const GridEmitter::GeometryGrid& grid = grid_planner->GetGridEmitter()->Grid();
+        const float min_extent = (float)nMath::Min(_bounds.getWidth(), _bounds.getHeight());
+        _g.setColour(Colour::fromRGBA(0x77, 0x77, 0x77, 0x99));
+        const int offset = (int)(min_extent / 2.f - _zoom_factor * PlannerAStar::GridDistance / 2);
+        const int cellSize = (int)_zoom_factor / PlannerAStar::GridCellsPerMeter;
+        for (int i = 0; i < GridEmitter::GridResolution; ++i)
         {
-            if (grid[i][j])
+            for (int j = 0; j < GridEmitter::GridResolution; ++j)
             {
-                _g.drawRect(
-                    cellSize * j + offset,
-                    cellSize * (PlannerAStar::GridResolution - i - 1) + offset,
-                    cellSize - 1,
-                    cellSize - 1);
+                if (grid[i][j])
+                {
+                    _g.drawRect(
+                        cellSize * j + offset,
+                        cellSize * (GridEmitter::GridResolution - i - 1) + offset,
+                        cellSize - 1,
+                        cellSize - 1);
+                }
             }
         }
+
+        simulation_results[current_read_index].lock = RW_NONE;
     }
 
     _g.setColour(Colour::fromRGB(0xFF, 0xFF, 0xFF));
-    const nMath::Vector center = ImageHelper::Center(_bounds);
-    const nMath::Vector emitter_pos = grid_emitter->Point().GetPosition();
-    nMath::Vector emitter_draw_pos{ emitter_pos.x * _zoom_factor + center.x, -emitter_pos.y * _zoom_factor + center.y, 0.f };
-    _g.fillEllipse(emitter_draw_pos.x - 1.f, emitter_draw_pos.y - 1.f, 2.5, 2.5);
-
     const float attenuation_range = 20.f * _zoom_factor;
     _g.drawEllipse(receiver_x - attenuation_range, receiver_y - attenuation_range,
         2.f * attenuation_range, 2.f * attenuation_range, 1.f);
@@ -697,9 +685,6 @@ void MainComponent::PaintEmitter(Graphics& _g, const Rectangle<int> _bounds, con
     nMath::Vector emitter_pos;
     {
         std::lock_guard<std::mutex> guard(*mutex_emitter_update);
-        if (sources[selected_source].emitter_type != EmitterType::EMITTER_TYPE_POINT) {
-            return;
-        }
         const MovingEmitter& moving_emitter = *sources[selected_source].moving_emitter;        
         emitter_pos = moving_emitter.GetPosition();
         gain_left = moving_emitter.Gain(0);
@@ -829,6 +814,7 @@ void MainComponent::ExportAsImage(const File& file, const int width, const int h
     std::shared_ptr<RoomGeometry> room = current_room;
     const PropagationPlanner::SourceConfig planner_config = {
         emitter_pos,
+        sources[selected_source].grid_emitter,
         test_frequency.load(),
         time_scale.load()
     };
@@ -895,7 +881,6 @@ void MainComponent::resized()
     slider_radius.setBounds(frame_next());
     slider_spread.setBounds(frame_next());
     combo_selected_pan_law.setBounds(frame_next());
-    combo_emitter_type.setBounds(frame_next());
 
     // Global
     combo_method.setBounds(frame_next());
@@ -950,16 +935,11 @@ void MainComponent::mouseDown(const MouseEvent& event)
             receiver_x = event.getMouseDownX();
             receiver_y = event.getMouseDownY();
         }
-        else {
-            // TODO: consolidate getting grid emitter
+        else {            
             std::lock_guard<std::mutex> guard(*mutex_emitter_update);
-            if (sources[selected_source].emitter_type != EmitterType::EMITTER_TYPE_GRID) {
-                return;
-            }
             std::shared_ptr<GridEmitter> grid_emitter = sources[selected_source].grid_emitter;
             const int x = event.getMouseDownX();
-            const int y = event.getMouseDownY();
-            // TODO: Call in update thread?
+            const int y = event.getMouseDownY();            
             const nMath::Vector center = ImageHelper::Center(getBounds());
             const float inv_zoom_factor = 1.f / 10.f;
             const nMath::Vector position = { (x - center.x) * inv_zoom_factor , (y - center.y) * -inv_zoom_factor, 0.f };
@@ -1253,7 +1233,6 @@ void MainComponent::update()
 #else
         emitter_pos = moving_emitter->Update(0);
 #endif
-        source.grid_emitter->Update(receiever_pos);
     }        
     std::shared_ptr<RoomGeometry> room = current_room; // this isn't guarunteed atomic
     const float time_now = (float)(Time::currentTimeMillis() % ((1 + (int)test_frequency) * 1000));// TODO: start at t = 0 or store in planner.
@@ -1261,6 +1240,7 @@ void MainComponent::update()
     {
         const PropagationPlanner::SourceConfig planner_config = {
             emitter_pos,
+            source.grid_emitter,
             test_frequency.load(),
             time_scale.load()
         };
@@ -1294,6 +1274,11 @@ void MainComponent::update()
         ++write_index;        
 
         const float simulated_gain = simulation_result.object.result->gain;
+        if (current_method == SoundPropagation::Method_GridEmitter) {
+            std::lock_guard<std::mutex> guard(*mutex_emitter_update);
+            moving_emitter->SetPosition(simulation_result.object.result->emitter_direction);
+            moving_emitter->SetSpread(100.f * simulation_result.object.result->spread);
+        }
         moving_emitter->ComputeGain(receiever_pos, simulated_gain);
     }
     
@@ -1422,14 +1407,6 @@ void MainComponent::comboBoxChanged(ComboBox* comboBoxThatHasChanged)
         if (next_id > 0) {
             const int32 source_id = selected_source.load();
             sources[source_id].moving_emitter->SetPanLaw(static_cast<PanningLaw>(next_id));
-        }
-    }
-    else if (comboBoxThatHasChanged == &combo_emitter_type) {
-        const int32 next_id = combo_emitter_type.getSelectedId();
-        if (next_id > 0)
-        {
-            const int32 source_id = selected_source.load();
-            sources[source_id].emitter_type = (EmitterType)next_id;
         }
     }
     else if (comboBoxThatHasChanged == &combo_room ||

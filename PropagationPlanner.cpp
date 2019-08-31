@@ -345,6 +345,7 @@ void PlannerGridEmitter::Plan(const PropagationPlanner::SourceConfig& _config) {
 void PlannerGridEmitter::Simulate(PropagationResult& result, const nMath::Vector& _receiver, const float _time_ms) const {
     _time_ms;
     const float attenuation_range = 20.f;
+    const float near_field = 1.5f;
     assert(grid_emitter != nullptr);
     if (grid_emitter == nullptr) {        
         return;
@@ -392,7 +393,12 @@ void PlannerGridEmitter::Simulate(PropagationResult& result, const nMath::Vector
     }
 
     if (total_weight > 0.f && emitter_direction == nMath::Vector{ 0.f,0.f,0.f }) {
-        spread = 1 - nMath::Length(total_dir) / total_weight;
+        spread = 1.f - nMath::Length(total_dir) / total_weight;
+        if (closest_distance < near_field + half_grid_cell_size) {
+            const float near_field_range = near_field - nMath::Max(0.f, closest_distance - half_grid_cell_size);
+            const float near_field_lerp = near_field_range / near_field;
+            spread += (1.f - spread) * near_field_lerp;
+        }
         emitter_direction = closest_distance * total_dir / nMath::Length(total_dir);        
     }
     emitter_direction += _receiver;

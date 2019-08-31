@@ -48,6 +48,11 @@ struct SoundPropagationSource
     std::atomic<SourceType> source_type;    
 };
 
+enum SoundPropagationImageMode : int32 {
+    SPIM_Pressure = 1,
+    SPIM_Spread
+};
+
 //==============================================================================
 /*
     This component lives inside our window, and this is where you should put all
@@ -140,12 +145,15 @@ private:
     std::atomic_bool show_contours;
     std::atomic_bool show_crests_only;
     std::atomic_bool flag_gamma_correct;
+    std::atomic<SoundPropagationImageMode> image_mode;
 
     // Gui
     ComboBox combo_room;
     Label label_selected_room;
     ComboBox combo_method;
     Label label_method;
+    ComboBox combo_image_mode;
+    Label label_image_mode;
     
     Slider slider_gain;
     Label label_gain;

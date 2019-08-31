@@ -316,6 +316,17 @@ MainComponent::MainComponent() :
     write_index = 0;
     read_index = 1;
 
+    image_mode = SPIM_Pressure;
+    addAndMakeVisible(&combo_image_mode);
+    combo_image_mode.addListener(this);
+    combo_image_mode.addItem("Pressure", SPIM_Pressure);
+    combo_image_mode.addItem("Spread", SPIM_Spread);
+    combo_image_mode.setSelectedId(SPIM_Pressure);
+
+    addAndMakeVisible(&label_image_mode);
+    label_image_mode.setText("Image Metric", dontSendNotification);
+    label_image_mode.attachToComponent(&combo_image_mode, true);
+
     current_room = nullptr;
     addAndMakeVisible(&combo_room);    
     combo_room.addListener(this);
@@ -893,6 +904,7 @@ void MainComponent::resized()
     // Global
     combo_method.setBounds(frame_next());
     combo_room.setBounds(frame_next());
+    combo_image_mode.setBounds(frame_next());
 
     juce::Rectangle<int> frame_button_l = frame_next();
     juce::Rectangle<int> frame_button_r = frame_button_l.removeFromRight(frame_button_l.getWidth() / 2);    
@@ -1114,6 +1126,7 @@ void MainComponent::GenerateSPLImage(Image& _image,
     const bool overlay_contours = show_contours.load();
     const bool filter_crests = show_crests_only.load();
     const bool gamma_correct = flag_gamma_correct.load();
+    const SoundPropagationImageMode image_metric = image_mode.load();
     const int extent = _image.getWidth();
     const Image::BitmapData bitmap(_image, Image::BitmapData::writeOnly);
 
@@ -1158,6 +1171,9 @@ void MainComponent::GenerateSPLImage(Image& _image,
                 0.f };
             planner->Simulate(result, pixel_to_world, _time);
             float energy = result.gain;
+            if (image_metric == SPIM_Spread) {
+                energy = result.spread;
+            }
             if (filter_crests)
             {
                 if (!(j > 1 && i > 1 &&
@@ -1415,6 +1431,12 @@ void MainComponent::comboBoxChanged(ComboBox* comboBoxThatHasChanged)
         if (next_id > 0) {
             const int32 source_id = selected_source.load();
             sources[source_id].moving_emitter->SetPanLaw(static_cast<PanningLaw>(next_id));
+        }
+    }
+    else if (comboBoxThatHasChanged == &combo_image_mode) {
+        const int32 next_id = combo_image_mode.getSelectedId();
+        if (next_id > 0) {
+            image_mode.store(static_cast<SoundPropagationImageMode>(next_id));
         }
     }
     else if (comboBoxThatHasChanged == &combo_room ||

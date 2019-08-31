@@ -340,6 +340,7 @@ void PlannerGridEmitter::Preprocess(std::shared_ptr<const RoomGeometry> _room) {
 
 void PlannerGridEmitter::Plan(const PropagationPlanner::SourceConfig& _config) {
     grid_emitter = _config.grid_emitter;
+    near_field_mode = _config.near_field_mode;
 }
 
 void PlannerGridEmitter::Simulate(PropagationResult& result, const nMath::Vector& _receiver, const float _time_ms) const {
@@ -357,6 +358,7 @@ void PlannerGridEmitter::Simulate(PropagationResult& result, const nMath::Vector
     float total_weight = 0.0;
     float spread = 0.f;
     float closest_distance = FLT_MAX;
+    nMath::Vector closest_grid_dir = { 0.0, 0.0, 0.0 };
     nMath::Vector total_dir = { 0.0, 0.0, 0.0 };
     nMath::Vector emitter_direction = { 0.0, 0.0, 0.0 };
 
@@ -383,6 +385,7 @@ void PlannerGridEmitter::Simulate(PropagationResult& result, const nMath::Vector
                 {
                     if (distance < closest_distance) {
                         closest_distance = distance;
+                        closest_grid_dir = direction;
                     }
                     const float weight = attenuation_range - distance;
                     total_dir += (weight / distance) * direction;
@@ -393,11 +396,24 @@ void PlannerGridEmitter::Simulate(PropagationResult& result, const nMath::Vector
     }
 
     if (total_weight > 0.f && emitter_direction == nMath::Vector{ 0.f,0.f,0.f }) {
-        spread = 1.f - nMath::Length(total_dir) / total_weight;
-        if (closest_distance < near_field + half_grid_cell_size) {
-            const float near_field_range = near_field - nMath::Max(0.f, closest_distance - half_grid_cell_size);
-            const float near_field_lerp = near_field_range / near_field;
-            spread += (1.f - spread) * near_field_lerp;
+        spread = 1.f - nMath::Length(total_dir) / total_weight;        
+        switch (near_field_mode) {
+        case SoundPropagation::NFM_L_Infinite:
+            {
+                const float near_field_range = nMath::Max(fabsf(closest_grid_dir.x), fabsf(closest_grid_dir.y));
+                if (near_field_range < near_field + half_grid_cell_size) {
+                    const float near_field_lerp = nMath::Max(0.f, near_field - (near_field_range - half_grid_cell_size)) / near_field;
+                    spread += nMath::Min(1.f, (1.f - spread) * near_field_lerp);
+                }            
+            }
+            break;
+        case SoundPropagation::NFM_L2:
+            if (closest_distance < near_field + half_grid_cell_size) {
+                const float near_field_range = near_field - nMath::Max(0.f, closest_distance - half_grid_cell_size);
+                const float near_field_lerp = near_field_range / near_field;
+                spread += (1.f - spread) * near_field_lerp;
+            }
+            break;
         }
         emitter_direction = closest_distance * total_dir / nMath::Length(total_dir);        
     }

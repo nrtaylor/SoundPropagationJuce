@@ -18,7 +18,10 @@ class RoomGeometry;
 class PropagationPlanner;
 struct PropagationResult;
 namespace nDSP { struct Butterworth1Pole; }
-namespace SoundPropagation { enum MethodType : int32; }
+namespace SoundPropagation { 
+    enum MethodType : int32; 
+    enum NearFieldMode : int32;
+}
 
 struct SoundBuffer
 {
@@ -145,7 +148,8 @@ private:
     std::atomic_bool show_contours;
     std::atomic_bool show_crests_only;
     std::atomic_bool flag_gamma_correct;
-    std::atomic<SoundPropagationImageMode> image_mode;
+    std::atomic<SoundPropagationImageMode> image_mode; // TODO: metric
+    std::atomic<SoundPropagation::NearFieldMode> near_field_mode; // TODO: Per planner
 
     // Gui
     ComboBox combo_room;
@@ -154,6 +158,8 @@ private:
     Label label_method;
     ComboBox combo_image_mode;
     Label label_image_mode;
+    ComboBox combo_near_field_mode;
+    Label label_near_field_mode;
     
     Slider slider_gain;
     Label label_gain;

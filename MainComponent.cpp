@@ -327,6 +327,18 @@ MainComponent::MainComponent() :
     label_image_mode.setText("Image Metric", dontSendNotification);
     label_image_mode.attachToComponent(&combo_image_mode, true);
 
+    near_field_mode = SoundPropagation::NFM_Off;
+    addAndMakeVisible(&combo_near_field_mode);
+    combo_near_field_mode.addListener(this);
+    combo_near_field_mode.addItem("Off", SoundPropagation::NFM_Off);
+    combo_near_field_mode.addItem("L^2", SoundPropagation::NFM_L2);
+    combo_near_field_mode.addItem("L^Infinity", SoundPropagation::NFM_L_Infinite);
+    combo_near_field_mode.setSelectedId(SoundPropagation::NFM_Off);
+
+    addAndMakeVisible(&label_near_field_mode);
+    label_near_field_mode.setText("Near Field", dontSendNotification);
+    label_near_field_mode.attachToComponent(&combo_near_field_mode, true);
+
     current_room = nullptr;
     addAndMakeVisible(&combo_room);    
     combo_room.addListener(this);
@@ -835,7 +847,8 @@ void MainComponent::ExportAsImage(const File& file, const int width, const int h
         emitter_pos,
         sources[selected_source].grid_emitter,
         test_frequency.load(),
-        time_scale.load()
+        time_scale.load(),
+        near_field_mode.load()
     };
     std::shared_ptr<PropagationPlanner> planner = PropagationPlanner::MakePlanner(current_method);
     planner->Preprocess(room);
@@ -905,6 +918,7 @@ void MainComponent::resized()
     combo_method.setBounds(frame_next());
     combo_room.setBounds(frame_next());
     combo_image_mode.setBounds(frame_next());
+    combo_near_field_mode.setBounds(frame_next()); // TODO: Hide for non-grid emitter modes
 
     juce::Rectangle<int> frame_button_l = frame_next();
     juce::Rectangle<int> frame_button_r = frame_button_l.removeFromRight(frame_button_l.getWidth() / 2);    
@@ -1266,7 +1280,8 @@ void MainComponent::update()
             emitter_pos,
             source.grid_emitter,
             test_frequency.load(),
-            time_scale.load()
+            time_scale.load(),
+            near_field_mode.load()
         };
         planner = PropagationPlanner::MakePlanner(current_method);
         planner->Preprocess(room);
@@ -1437,6 +1452,12 @@ void MainComponent::comboBoxChanged(ComboBox* comboBoxThatHasChanged)
         const int32 next_id = combo_image_mode.getSelectedId();
         if (next_id > 0) {
             image_mode.store(static_cast<SoundPropagationImageMode>(next_id));
+        }
+    }
+    else if (comboBoxThatHasChanged == &combo_near_field_mode) {
+        const int32 next_id = combo_near_field_mode.getSelectedId();
+        if (next_id > 0) {
+            near_field_mode.store(static_cast<SoundPropagation::NearFieldMode>(next_id));
         }
     }
     else if (comboBoxThatHasChanged == &combo_room ||

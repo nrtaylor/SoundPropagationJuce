@@ -34,6 +34,12 @@ namespace SoundPropagation
         PRD_REFLECTIONS_ONLY,
         PRD_FULL,
     };
+
+    enum NearFieldMode : signed int {
+        NFM_Off = 1,
+        NFM_L2,
+        NFM_L_Infinite
+    };
 }
 
 struct PropagationSimulationCache
@@ -67,6 +73,7 @@ public:
         const std::shared_ptr<GridEmitter> grid_emitter;
         const float frequency;
         const float time_scale;
+        const SoundPropagation::NearFieldMode near_field_mode;
     };
     virtual void Plan(const SourceConfig& _config) = 0;
     virtual void Simulate(PropagationResult& result, const nMath::Vector& _receiver, const float _time_ms) const = 0;
@@ -99,6 +106,7 @@ public:
     }
 private:
     std::shared_ptr<GridEmitter> grid_emitter;
+    SoundPropagation::NearFieldMode near_field_mode;
 };
 
 class PlannerRayCasts : public PropagationPlanner

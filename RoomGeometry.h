@@ -122,12 +122,12 @@ public:
         for (auto& row : grid) {
             row.fill(false);
         }
-        grid[15][16] = true;
-        grid[15][16] = true;
-        grid[15][15] = true;
-        grid[41][20] = true;
-        grid[42][20] = true;
-        grid[44][20] = true;
+        //grid[15][16] = true;
+        //grid[15][16] = true;
+        //grid[15][15] = true;
+        //grid[41][20] = true;
+        //grid[42][20] = true;
+        //grid[44][20] = true;
     }
 
     void GridOn(const nMath::Vector& position);

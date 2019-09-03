@@ -511,6 +511,7 @@ MainComponent::MainComponent() :
     combo_method.addItem("Plane Waves", SoundPropagation::Method_PlaneWave);
     combo_method.addItem("Grid Emitter", SoundPropagation::Method_GridEmitter);
     current_method = SoundPropagation::Method_DirectLOS;
+    updating_planner_method = false;
     combo_method.setSelectedId(SoundPropagation::Method_DirectLOS);
 
     addAndMakeVisible(&label_method);
@@ -670,6 +671,9 @@ void DrawMeter(Graphics& _g, const Rectangle<int> _bounds, const float gain, con
 }
 
 void MainComponent::PaintGridEmitterSimulation(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) {
+    if (updating_planner_method) {
+        return; // TODO: Fix underlying issue with planner pointer
+    }
     ReadWriteControl rw = RW_NONE;
     const uint32 current_read_index = read_index;
     if (simulation_results[current_read_index].lock.compare_exchange_strong(rw, RW_READING)) {        
@@ -1468,8 +1472,10 @@ void MainComponent::comboBoxChanged(ComboBox* comboBoxThatHasChanged)
         {
             current_room = rooms[next_id - 1];    
         }
+        updating_planner_method = true;
         current_method = static_cast<SoundPropagation::MethodType>(combo_method.getSelectedId());        
         sources[selected_source].planner = PropagationPlanner::MakePlanner(current_method);
+        updating_planner_method = false;
  
         button_show_grid.setEnabled(false);
         button_show_crests_only.setEnabled(false);

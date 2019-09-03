@@ -386,7 +386,8 @@ void PlannerGridEmitter::Simulate(PropagationResult& result, const nMath::Vector
                         closest_distance = distance;
                         closest_grid_dir = direction;
                     }
-                    const float weight = attenuation_range - distance;
+                    float weight = attenuation_range - distance;
+                    //weight *= weight;
                     total_dir += (weight / distance) * direction;
                     total_weight += weight;
                 }
@@ -413,10 +414,14 @@ void PlannerGridEmitter::Simulate(PropagationResult& result, const nMath::Vector
             }
             break;
             case SoundPropagation::NFM_L2:
-                if (closest_distance < near_field + half_grid_cell_size) {
-                    const float near_field_range = near_field - nMath::Max(0.f, closest_distance - half_grid_cell_size);
-                    const float near_field_lerp = near_field_range / near_field;
-                    spread += (1.f - spread) * near_field_lerp;
+                {
+                    const nMath::Vector closest_to_grid = {nMath::Max(0.f, fabsf(closest_grid_dir.x) - half_grid_cell_size),
+                        nMath::Max(0.f, fabsf(closest_grid_dir.y) - half_grid_cell_size), 0.f};
+                    const float dist_to_cell = nMath::Length(closest_to_grid);
+                    if (dist_to_cell < near_field) {
+                        const float near_field_lerp = (near_field - dist_to_cell)/ near_field;
+                        spread += (1.f - spread) * near_field_lerp;
+                    }
                 }
                 break;
             }

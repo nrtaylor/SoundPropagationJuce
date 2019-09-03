@@ -331,13 +331,25 @@ MainComponent::MainComponent() :
     addAndMakeVisible(&combo_near_field_mode);
     combo_near_field_mode.addListener(this);
     combo_near_field_mode.addItem("Off", SoundPropagation::NFM_Off);
-    combo_near_field_mode.addItem("L^2", SoundPropagation::NFM_L2);
-    combo_near_field_mode.addItem("L^Infinity", SoundPropagation::NFM_L_Infinite);
+    combo_near_field_mode.addItem("L^2 Norm", SoundPropagation::NFM_L2);
+    combo_near_field_mode.addItem("L^Infinity Norm", SoundPropagation::NFM_L_Infinite);
     combo_near_field_mode.setSelectedId(SoundPropagation::NFM_Off);
 
     addAndMakeVisible(&label_near_field_mode);
     label_near_field_mode.setText("Near Field", dontSendNotification);
     label_near_field_mode.attachToComponent(&combo_near_field_mode, true);
+
+    grid_emitter_weight_func = SoundPropagation::GEWF_Linear;
+    addAndMakeVisible(&combo_grid_emitter_weight_func);
+    combo_grid_emitter_weight_func.addListener(this);
+    combo_grid_emitter_weight_func.addItem("Linear", SoundPropagation::GEWF_Linear);
+    combo_grid_emitter_weight_func.addItem("Squared", SoundPropagation::GEWF_Squared);
+    combo_grid_emitter_weight_func.addItem("Distant Only", SoundPropagation::GEWF_DistantOnly);
+    combo_grid_emitter_weight_func.setSelectedId(SoundPropagation::GEWF_Linear);
+
+    addAndMakeVisible(&label_grid_emitter_weight_func);
+    label_grid_emitter_weight_func.setText("Grid Weight Func", dontSendNotification);
+    label_grid_emitter_weight_func.attachToComponent(&combo_grid_emitter_weight_func, true);
 
     current_room = nullptr;
     addAndMakeVisible(&combo_room);    
@@ -852,7 +864,8 @@ void MainComponent::ExportAsImage(const File& file, const int width, const int h
         sources[selected_source].grid_emitter,
         test_frequency.load(),
         time_scale.load(),
-        near_field_mode.load()
+        near_field_mode.load(),
+        grid_emitter_weight_func.load()
     };
     std::shared_ptr<PropagationPlanner> planner = PropagationPlanner::MakePlanner(current_method);
     planner->Preprocess(room);
@@ -923,6 +936,7 @@ void MainComponent::resized()
     combo_room.setBounds(frame_next());
     combo_image_mode.setBounds(frame_next());
     combo_near_field_mode.setBounds(frame_next()); // TODO: Hide for non-grid emitter modes
+    combo_grid_emitter_weight_func.setBounds(frame_next()); // TODO: Hide for non-grid emitter modes
 
     juce::Rectangle<int> frame_button_l = frame_next();
     juce::Rectangle<int> frame_button_r = frame_button_l.removeFromRight(frame_button_l.getWidth() / 2);    
@@ -1285,7 +1299,8 @@ void MainComponent::update()
             source.grid_emitter,
             test_frequency.load(),
             time_scale.load(),
-            near_field_mode.load()
+            near_field_mode.load(),
+            grid_emitter_weight_func.load()
         };
         planner = PropagationPlanner::MakePlanner(current_method);
         planner->Preprocess(room);
@@ -1462,6 +1477,12 @@ void MainComponent::comboBoxChanged(ComboBox* comboBoxThatHasChanged)
         const int32 next_id = combo_near_field_mode.getSelectedId();
         if (next_id > 0) {
             near_field_mode.store(static_cast<SoundPropagation::NearFieldMode>(next_id));
+        }
+    }
+    else if (comboBoxThatHasChanged == &combo_grid_emitter_weight_func) {
+        const int32 next_id = combo_grid_emitter_weight_func.getSelectedId();
+        if (next_id > 0) {
+            grid_emitter_weight_func.store(static_cast<SoundPropagation::GridEmitterWeightFunction>(next_id));
         }
     }
     else if (comboBoxThatHasChanged == &combo_room ||

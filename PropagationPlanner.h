@@ -40,6 +40,12 @@ namespace SoundPropagation
         NFM_L2,
         NFM_L_Infinite
     };
+
+    enum GridEmitterWeightFunction : signed int {
+        GEWF_Linear = 1,
+        GEWF_Squared,
+        GEWF_DistantOnly
+    };
 }
 
 struct PropagationSimulationCache
@@ -74,6 +80,7 @@ public:
         const float frequency;
         const float time_scale;
         const SoundPropagation::NearFieldMode near_field_mode;
+        const SoundPropagation::GridEmitterWeightFunction grid_emitter_weight_function;
     };
     virtual void Plan(const SourceConfig& _config) = 0;
     virtual void Simulate(PropagationResult& result, const nMath::Vector& _receiver, const float _time_ms) const = 0;
@@ -107,6 +114,7 @@ public:
 private:
     std::shared_ptr<GridEmitter> grid_emitter;
     SoundPropagation::NearFieldMode near_field_mode;
+    SoundPropagation::GridEmitterWeightFunction weight_function;
 };
 
 class PlannerRayCasts : public PropagationPlanner

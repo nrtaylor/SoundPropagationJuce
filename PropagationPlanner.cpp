@@ -341,6 +341,7 @@ void PlannerGridEmitter::Preprocess(std::shared_ptr<const RoomGeometry> _room) {
 void PlannerGridEmitter::Plan(const PropagationPlanner::SourceConfig& _config) {
     grid_emitter = _config.grid_emitter;
     near_field_mode = _config.near_field_mode;
+    weight_function = _config.grid_emitter_weight_function;
 }
 
 void PlannerGridEmitter::Simulate(PropagationResult& result, const nMath::Vector& _receiver, const float _time_ms) const {
@@ -387,7 +388,14 @@ void PlannerGridEmitter::Simulate(PropagationResult& result, const nMath::Vector
                         closest_grid_dir = direction;
                     }
                     float weight = attenuation_range - distance;
-                    //weight *= weight;
+                    switch (weight_function) {
+                    case SoundPropagation::GEWF_Squared:
+                        weight *= weight;
+                        break;
+                    case SoundPropagation::GEWF_DistantOnly:
+                        // TODO: distant cells only
+                        break;
+                    }
                     total_dir += (weight / distance) * direction;
                     total_weight += weight;
                 }

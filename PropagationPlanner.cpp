@@ -360,6 +360,7 @@ void PlannerGridEmitter::Simulate(PropagationResult& result, const nMath::Vector
     float spread = 0.f;
     float closest_distance = FLT_MAX;
     nMath::Vector closest_grid_dir = { 0.0, 0.0, 0.0 };
+    nMath::Vector closest_grid_pos = { 0.0, 0.0, 0.0 };
     nMath::Vector total_dir = { 0.0, 0.0, 0.0 };
     nMath::Vector emitter_direction = { 0.0, 0.0, 0.0 };
 
@@ -378,6 +379,7 @@ void PlannerGridEmitter::Simulate(PropagationResult& result, const nMath::Vector
                     spread = 1.0;
                     emitter_direction = { 0.001f, 0.0, 0.0 };
                     closest_distance = 0.f;
+                    closest_grid_pos = grid_cell_center;
                     break;
                 }
                 const float distance = nMath::Length(direction);
@@ -386,6 +388,7 @@ void PlannerGridEmitter::Simulate(PropagationResult& result, const nMath::Vector
                     if (distance < closest_distance) {
                         closest_distance = distance;
                         closest_grid_dir = direction;
+                        closest_grid_pos = grid_cell_center;
                     }
                     float weight = attenuation_range - distance;
                     switch (weight_function) {
@@ -439,5 +442,6 @@ void PlannerGridEmitter::Simulate(PropagationResult& result, const nMath::Vector
     emitter_direction += _receiver;
     result.emitter_direction = emitter_direction;
     result.spread = spread;
+    result.closest_point = closest_grid_pos;
     result.gain = nMath::Max(0.f, (attenuation_range - closest_distance) / attenuation_range);
 }

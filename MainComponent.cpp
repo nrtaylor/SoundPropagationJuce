@@ -19,7 +19,7 @@ namespace SPTBModes {
 //#define PROFILE_SIMULATION
 
 constexpr float DefaultZoomFactor() {
-    return SPTBModes::kTestingPanLaws ? 150.f : 15.f;
+    return SPTBModes::kTestingPanLaws ? 150.f : 16.f;
 }
 
 constexpr float DefaultZoomFactorPixel() {
@@ -710,6 +710,18 @@ void MainComponent::PaintGridEmitterSimulation(Graphics& _g, const Rectangle<int
                 }
             }
         }
+
+        const nMath::Vector closest_point = simulation_results[current_read_index].object.result->closest_point;
+        const nMath::Vector center = ImageHelper::Center(_bounds);
+
+        nMath::Vector emitter_draw_pos{ closest_point.x * _zoom_factor + center.x,
+            -closest_point.y * _zoom_factor + center.y, 0.f };
+        const float half_cell_size = static_cast<float>(cellSize / 2);
+        _g.drawLine(emitter_draw_pos.x - half_cell_size, emitter_draw_pos.y - half_cell_size,
+            emitter_draw_pos.x + half_cell_size - 1, emitter_draw_pos.y + half_cell_size - 1);
+        _g.drawLine(emitter_draw_pos.x - half_cell_size, emitter_draw_pos.y + half_cell_size - 1,
+            emitter_draw_pos.x + half_cell_size - 1, emitter_draw_pos.y - half_cell_size);
+        _g.fillEllipse(emitter_draw_pos.x - 1.f, emitter_draw_pos.y - 1.f, 2.5, 2.5);
 
         simulation_results[current_read_index].lock = RW_NONE;
     }

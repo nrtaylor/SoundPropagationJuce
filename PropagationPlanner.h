@@ -62,6 +62,7 @@ struct PropagationResult
     float spread;
     int32_t wave_id;
     nMath::Vector emitter_direction;
+    nMath::Vector closest_point;
 
     std::vector<nMath::LineSegment> intersections;
     std::shared_ptr<PropagationSimulationCache> cache;

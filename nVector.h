@@ -45,6 +45,11 @@ namespace nMath
         return lhs.x == rhs.x && lhs.y == rhs.y && lhs.z == rhs.z;
     }
 
+    inline bool operator!= (const Vector& lhs, const Vector& rhs)
+    {
+        return !(lhs == rhs);
+    }
+
     inline float Dot(const Vector& lhs, const Vector& rhs)
     {
         return lhs.x*rhs.x + lhs.y*rhs.y + lhs.z*rhs.z;

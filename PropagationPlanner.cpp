@@ -30,7 +30,7 @@ std::shared_ptr<PropagationPlanner> PropagationPlanner::MakePlanner(const SoundP
         planner = std::make_shared<PlannerWave>(PlannerWave(PlannerWave::Wave_Plane));        
         break;
     case SoundPropagation::Method_LOSAStarFallback:
-        planner = std::make_shared<PlannerTwoStages<PlannerDirectLOS, PlannerAStar> >();
+        planner = std::make_shared<PlannerLOSAStar>();
         break;
     case SoundPropagation::Method_GridEmitter:
         planner = std::make_shared<PlannerGridEmitter>();
@@ -302,29 +302,30 @@ namespace
     }
 }
 
-template<class PlannerPrimary, class PlannerSecondary>
-PlannerTwoStages<PlannerPrimary, PlannerSecondary>::PlannerTwoStages()
+template<class PlannerPrimary, class PlannerSecondary, SoundPropagation::MethodType Method>
+PlannerTwoStages<PlannerPrimary, PlannerSecondary, Method>::PlannerTwoStages()
 {
     planner_primary = std::make_shared<PlannerPrimary>();
     planner_secondary = std::make_shared<PlannerSecondary>();
 }
 
-template<class PlannerPrimary, class PlannerSecondary>
-void PlannerTwoStages<PlannerPrimary, PlannerSecondary>::Preprocess(std::shared_ptr<const RoomGeometry> _room)
+template<class PlannerPrimary, class PlannerSecondary, SoundPropagation::MethodType Method>
+void PlannerTwoStages<PlannerPrimary, PlannerSecondary, Method>::Preprocess(std::shared_ptr<const RoomGeometry> _room)
 {
     planner_primary->Preprocess(_room);
     planner_secondary->Preprocess(_room);
 }
 
-template<class PlannerPrimary, class PlannerSecondary>
-void PlannerTwoStages<PlannerPrimary, PlannerSecondary>::Plan(const PropagationPlanner::SourceConfig& _config)
+template<class PlannerPrimary, class PlannerSecondary, SoundPropagation::MethodType Method>
+void PlannerTwoStages<PlannerPrimary, PlannerSecondary, Method>::Plan(const PropagationPlanner::SourceConfig& _config)
 {
     planner_primary->Plan(_config);
     planner_secondary->Plan(_config);
 }
 
-template<class PlannerPrimary, class PlannerSecondary>
-void PlannerTwoStages<PlannerPrimary, PlannerSecondary>::Simulate(PropagationResult& result, const nMath::Vector& _receiver, const float _time_ms) const
+template<class PlannerPrimary, class PlannerSecondary, SoundPropagation::MethodType Method>
+void PlannerTwoStages<PlannerPrimary, PlannerSecondary, Method>::Simulate(PropagationResult& result,
+    const nMath::Vector& _receiver, const float _time_ms) const
 {
     planner_primary->Simulate(result, _receiver, _time_ms);
     if (result.gain <= 0.f)
@@ -334,6 +335,150 @@ void PlannerTwoStages<PlannerPrimary, PlannerSecondary>::Simulate(PropagationRes
 }
 
 // Grid Emmiter
+namespace BookChapterCode {
+
+    using nMath::Vector;
+    using nMath::Max;
+    using nMath::Length;
+
+    struct Sphere {
+        Vector center;
+        float radius;        
+    };
+
+    struct GridEmitterResult {
+        bool audible;
+        Vector position;
+        float spread;
+        Vector closest_point; // For debugging
+    };
+
+    // Input is the direction to any voxel center.
+    bool PointInsideVoxel(const Vector& direction, const float cell_extent) {
+        return fabsf(direction.x) < cell_extent && fabsf(direction.y) < cell_extent &&
+            fabsf(direction.z) < cell_extent;
+    }
+
+    // Use the distance to the axis-aligned voxel to interpolate from 0 to 1.
+    float GetNearFieldInterpolation(const Vector& direction, const float voxel_extent) {
+        const float near_field_range = 1.5f;
+        const Vector closest_to_grid = {
+            Max(0.f, fabsf(direction.x) - voxel_extent),
+            Max(0.f, fabsf(direction.y) - voxel_extent),
+            Max(0.f, fabsf(direction.z) - voxel_extent)
+        };
+        const float dist_to_voxel = Length(closest_to_grid);
+        if (dist_to_voxel >= near_field_range) {
+            return 0.f;
+        }
+        return (near_field_range - dist_to_voxel) / near_field_range;
+    }
+
+    struct GridEmitterIterator {
+        const GridEmitter::GeometryGrid& grid;
+        Vector current;
+        int x, y;
+
+        GridEmitterIterator(const GridEmitter::GeometryGrid& _grid) : grid(_grid) {
+            x = -1; y = 0;
+            Next();
+        }
+
+        std::pair<Vector, bool> Get() {
+            return{ current, y != GridEmitter::GridResolution };
+        }
+
+        bool Increment() {
+            ++x;
+            if (x == GridEmitter::GridResolution) {
+                x = 0;
+                ++y;
+            }
+            return y < GridEmitter::GridResolution;
+        }
+
+        bool Next() {                        
+            while (Increment()) {
+                // Talk about this logic and multiple grids/chunks
+                if (grid[y][x]) {
+                    break;
+                }
+            }
+            if (y >= GridEmitter::GridResolution) {
+                return false;
+            }
+            // Update
+            //const float z = 1.f;
+            const float z = -0.5f;
+            const float half_grid_cell_size = 0.5f / (float)GridEmitter::GridCellsPerMeter;
+            current = { half_grid_cell_size + x / (float)GridEmitter::GridCellsPerMeter,
+                half_grid_cell_size + y / (float)GridEmitter::GridCellsPerMeter,
+                half_grid_cell_size + z / (float)GridEmitter::GridCellsPerMeter };
+            current.x -= GridEmitter::GridDistance / 2.f;
+            current.y -= GridEmitter::GridDistance / 2.f;
+            return true;
+        }
+    };
+
+    constexpr float kVoxelExtent = 0.5f / (float)GridEmitter::GridCellsPerMeter;
+
+    GridEmitterResult SolveGridEmitter(const Sphere& receiver, const GridEmitter::GeometryGrid& grid) {
+
+        const float attenuation_range = receiver.radius;
+
+        float total_weight = 0.f;
+        Vector total_dir = { 0.0, 0.0, 0.0 };
+
+        float closest_distance = FLT_MAX; // Because real sound may have different attenuation
+        Vector closest_grid_dir, closest_grid_pos = { 0.0, 0.0, 0.0 };
+
+        for (GridEmitterIterator grid_it = { grid }; grid_it.Get().second; grid_it.Next()) {
+            const Vector voxel_center = grid_it.Get().first;
+            const Vector direction = voxel_center - receiver.center;
+            if (PointInsideVoxel(direction, kVoxelExtent)) {
+                closest_distance = 0.f;
+                closest_grid_pos = voxel_center;
+                break;
+            }
+            const float distance = nMath::Length(direction);
+            if (distance < attenuation_range)
+            {
+                if (distance < closest_distance) {
+                    closest_distance = distance;
+                    closest_grid_dir = direction;
+                    closest_grid_pos = voxel_center;
+                }
+                const float weight = attenuation_range - distance;
+                total_dir += (weight / distance) * direction;
+                total_weight += weight;
+            }
+        }
+
+        Vector emitter_pos = receiver.center;
+        float spread = 0.f;
+        const float total_dir_length = nMath::Length(total_dir);
+        if (total_dir_length <= FLT_EPSILON) {
+            spread = 1.f;
+            emitter_pos += nMath::Vector{ closest_distance, 0.f, 0.f };
+        }
+        else if (total_weight > FLT_EPSILON) {
+            spread = 1.f - total_dir_length / total_weight;
+            const float near_field_lerp = GetNearFieldInterpolation(closest_grid_dir, kVoxelExtent);
+            if (near_field_lerp > 0.f) {
+                spread += (1.f - spread) * near_field_lerp;
+            }
+            emitter_pos += closest_distance * total_dir / total_dir_length;
+        }
+
+        GridEmitterResult result;
+        result.audible = closest_distance < attenuation_range;
+        result.position = emitter_pos;
+        result.spread = spread;
+        result.closest_point = closest_grid_pos;
+        return result;
+    }
+}
+
 void PlannerGridEmitter::Preprocess(std::shared_ptr<const RoomGeometry> _room) {
     _room;
 }
@@ -356,7 +501,7 @@ void PlannerGridEmitter::Simulate(PropagationResult& result, const nMath::Vector
 
     const float half_grid_cell_size = 0.5f / (float)GridEmitter::GridCellsPerMeter;    
 
-    float total_weight = 0.0;
+    float total_weight = 0.f;
     float spread = 0.f;
     float closest_distance = FLT_MAX;
     nMath::Vector closest_grid_dir = { 0.0, 0.0, 0.0 };
@@ -372,7 +517,8 @@ void PlannerGridEmitter::Simulate(PropagationResult& result, const nMath::Vector
                 grid_cell_center.x -= GridEmitter::GridDistance / 2.f;
                 grid_cell_center.y -= GridEmitter::GridDistance / 2.f;
                 const nMath::Vector direction = grid_cell_center - _receiver;
-                if (fabs(direction.x) < half_grid_cell_size &&
+                if (weight_function != SoundPropagation::GEWF_DistantOnly &&
+                    fabs(direction.x) < half_grid_cell_size &&
                     fabs(direction.y) < half_grid_cell_size &&
                     fabs(direction.z) < half_grid_cell_size)
                 {
@@ -382,7 +528,13 @@ void PlannerGridEmitter::Simulate(PropagationResult& result, const nMath::Vector
                     closest_grid_pos = grid_cell_center;
                     break;
                 }
-                const float distance = nMath::Length(direction);
+                float distance = nMath::Length(direction);
+                if (weight_function == SoundPropagation::GEWF_DistantOnly) {
+                    static const float kInnerAttenuation = 5.f;
+                    if (distance < kInnerAttenuation) {
+                        distance = attenuation_range * (1 - distance / kInnerAttenuation);
+                    }
+                }
                 if (distance < attenuation_range)
                 {
                     if (distance < closest_distance) {
@@ -396,7 +548,6 @@ void PlannerGridEmitter::Simulate(PropagationResult& result, const nMath::Vector
                         weight *= weight;
                         break;
                     case SoundPropagation::GEWF_DistantOnly:
-                        // TODO: distant cells only
                         break;
                     }
                     total_dir += (weight / distance) * direction;
@@ -436,12 +587,20 @@ void PlannerGridEmitter::Simulate(PropagationResult& result, const nMath::Vector
                 }
                 break;
             }
-            emitter_direction = closest_distance * total_dir / nMath::Length(total_dir);
+            emitter_direction = closest_distance * total_dir / total_dir_length;
         }
     }
     emitter_direction += _receiver;
     result.emitter_direction = emitter_direction;
     result.spread = spread;
-    result.closest_point = closest_grid_pos;
+    result.closest_point = closest_grid_pos;    
+
+    const auto& bc = BookChapterCode::SolveGridEmitter({_receiver, attenuation_range}, grid);
+    if (bc.position != result.emitter_direction || bc.spread != result.spread) {
+        if (bc.position.x != FLT_MAX) {
+            result.emitter_direction = bc.position;
+        }
+        result.spread = bc.spread;
+    }
     result.gain = nMath::Max(0.f, (attenuation_range - closest_distance) / attenuation_range);
 }

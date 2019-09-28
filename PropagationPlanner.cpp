@@ -346,138 +346,176 @@ namespace BookChapterCode {
         float radius;        
     };
 
-    struct GridEmitterResult {
+    struct AttenuatedPosition {
         bool audible;
         Vector position;
         float spread;
-        Vector closest_point; // For debugging
+        Vector closest_voxel_center; // For debugging
     };
 
     // Input is the direction to any voxel center.
     bool PointInsideVoxel(const Vector& direction, const float cell_extent) {
-        return fabsf(direction.x) < cell_extent && fabsf(direction.y) < cell_extent &&
+        return fabsf(direction.x) < cell_extent &&
+            fabsf(direction.y) < cell_extent &&
             fabsf(direction.z) < cell_extent;
     }
 
     // Use the distance to the axis-aligned voxel to interpolate from 0 to 1.
-    float GetNearFieldInterpolation(const Vector& direction, const float voxel_extent) {
+    float GetNearFieldInterpolation(const Vector& direction,
+        const float voxel_extent) {
         const float near_field_range = 1.5f;
-        const Vector closest_to_grid = {
+        const Vector point_on_voxel = {
             Max(0.f, fabsf(direction.x) - voxel_extent),
             Max(0.f, fabsf(direction.y) - voxel_extent),
             Max(0.f, fabsf(direction.z) - voxel_extent)
         };
-        const float dist_to_voxel = Length(closest_to_grid);
+        const float dist_to_voxel = Length(point_on_voxel);
         if (dist_to_voxel >= near_field_range) {
             return 0.f;
         }
         return (near_field_range - dist_to_voxel) / near_field_range;
     }
-
-    struct GridEmitterIterator {
-        const GridEmitter::GeometryGrid& grid;
-        Vector current;
-        int x, y;
-
-        GridEmitterIterator(const GridEmitter::GeometryGrid& _grid) : grid(_grid) {
-            x = -1; y = 0;
-            Next();
-        }
-
-        std::pair<Vector, bool> Get() {
-            return{ current, y != GridEmitter::GridResolution };
-        }
-
-        bool Increment() {
-            ++x;
-            if (x == GridEmitter::GridResolution) {
-                x = 0;
-                ++y;
-            }
-            return y < GridEmitter::GridResolution;
-        }
-
-        bool Next() {                        
-            while (Increment()) {
-                // Talk about this logic and multiple grids/chunks
-                if (grid[y][x]) {
-                    break;
-                }
-            }
-            if (y >= GridEmitter::GridResolution) {
-                return false;
-            }
-            // Update
-            //const float z = 1.f;
-            const float z = -0.5f;
-            const float half_grid_cell_size = 0.5f / (float)GridEmitter::GridCellsPerMeter;
-            current = { half_grid_cell_size + x / (float)GridEmitter::GridCellsPerMeter,
-                half_grid_cell_size + y / (float)GridEmitter::GridCellsPerMeter,
-                half_grid_cell_size + z / (float)GridEmitter::GridCellsPerMeter };
-            current.x -= GridEmitter::GridDistance / 2.f;
-            current.y -= GridEmitter::GridDistance / 2.f;
-            return true;
-        }
-    };
-
-    constexpr float kVoxelExtent = 0.5f / (float)GridEmitter::GridCellsPerMeter;
-
-    GridEmitterResult SolveGridEmitter(const Sphere& receiver, const GridEmitter::GeometryGrid& grid) {
+    
+    template<typename VoxelContainer>
+    AttenuatedPosition VoxelsToAttenuatedPosition(const VoxelContainer& voxels,
+        const Sphere& receiver, const float voxel_extent) {
 
         const float attenuation_range = receiver.radius;
 
         float total_weight = 0.f;
-        Vector total_dir = { 0.0, 0.0, 0.0 };
+        Vector total_direction = { 0.0, 0.0, 0.0 };
 
-        float closest_distance = FLT_MAX; // Because real sound may have different attenuation
-        Vector closest_grid_dir, closest_grid_pos = { 0.0, 0.0, 0.0 };
-
-        for (GridEmitterIterator grid_it = { grid }; grid_it.Get().second; grid_it.Next()) {
-            const Vector voxel_center = grid_it.Get().first;
+        float closest_distance = FLT_MAX;
+        Vector closest_voxel_direction, closest_voxel_center = { 0.0, 0.0, 0.0 };
+                
+        for (const Vector voxel_center : voxels) {            
             const Vector direction = voxel_center - receiver.center;
             if (PointInsideVoxel(direction, kVoxelExtent)) {
                 closest_distance = 0.f;
-                closest_grid_pos = voxel_center;
+                closest_voxel_center = voxel_center;
                 break;
             }
-            const float distance = nMath::Length(direction);
+            const float distance = Length(direction);
             if (distance < attenuation_range)
             {
                 if (distance < closest_distance) {
                     closest_distance = distance;
-                    closest_grid_dir = direction;
-                    closest_grid_pos = voxel_center;
+                    closest_voxel_direction = direction;
+                    closest_voxel_center = voxel_center;
                 }
                 const float weight = attenuation_range - distance;
-                total_dir += (weight / distance) * direction;
+                total_direction += (weight / distance) * direction;
                 total_weight += weight;
             }
         }
 
-        Vector emitter_pos = receiver.center;
+        Vector emitter_position = receiver.center;
         float spread = 0.f;
-        const float total_dir_length = nMath::Length(total_dir);
+        const float total_dir_length = Length(total_direction);
         if (total_dir_length <= FLT_EPSILON) {
             spread = 1.f;
-            emitter_pos += nMath::Vector{ closest_distance, 0.f, 0.f };
+            emitter_position += Vector{ closest_distance, 0.f, 0.f };
         }
         else if (total_weight > FLT_EPSILON) {
             spread = 1.f - total_dir_length / total_weight;
-            const float near_field_lerp = GetNearFieldInterpolation(closest_grid_dir, kVoxelExtent);
+            const float near_field_lerp =
+                GetNearFieldInterpolation(closest_voxel_direction, voxel_extent);
             if (near_field_lerp > 0.f) {
                 spread += (1.f - spread) * near_field_lerp;
             }
-            emitter_pos += closest_distance * total_dir / total_dir_length;
+            emitter_position +=
+                closest_distance * total_direction / total_dir_length;
         }
 
-        GridEmitterResult result;
+        AttenuatedPosition result;
         result.audible = closest_distance < attenuation_range;
-        result.position = emitter_pos;
+        result.position = emitter_position;
         result.spread = spread;
-        result.closest_point = closest_grid_pos;
+        result.closest_voxel_center = closest_voxel_center;
         return result;
     }
 }
+constexpr float kVoxelExtent = 0.5f / (float)GridEmitter::GridCellsPerMeter;
+
+struct GridEmitterIterator {
+    const GridEmitter::GeometryGrid& grid;
+    nMath::Vector current;
+    int x, y;
+    int begin_x, begin_y;
+
+    GridEmitterIterator(const GridEmitter::GeometryGrid& _grid) : grid(_grid) {
+        x = -1; y = 0;
+        // Find beginning
+        HasNext();
+        begin_x = x; begin_y = y;
+    }
+
+    const nMath::Vector& Get() const {
+        return current;
+    }
+
+    GridEmitterIterator end() const {
+        GridEmitterIterator end_it(*this);
+        end_it.y = GridEmitter::GridResolution;
+        return end_it;
+    }
+
+    GridEmitterIterator begin() const {
+        GridEmitterIterator begin_it(*this);
+        // reset
+        begin_it.x = begin_x;
+        begin_it.y = begin_y;
+        return begin_it;
+    }
+
+    const nMath::Vector& operator*() const {
+        return current;
+    }
+
+    bool operator==(const GridEmitterIterator& other) const {
+        return (other.x == x || y == GridEmitter::GridResolution) && other.y == y && &other.grid == &grid;
+    }
+
+    bool operator!=(const GridEmitterIterator& other) const {
+        return !(*this == other);
+    }
+
+    GridEmitterIterator operator++() {
+        HasNext();
+        return *this;
+    }
+
+    bool Increment() {
+        ++x;
+        if (x == GridEmitter::GridResolution) {
+            x = 0;
+            ++y;
+        }
+        return y < GridEmitter::GridResolution;
+    }
+
+    bool HasNext() {
+        while (Increment()) {
+            // Talk about this logic and multiple grids/chunks
+            if (grid[y][x]) {
+                break;
+            }
+        }
+        if (y >= GridEmitter::GridResolution) {
+            return false;
+        }
+        // Update
+        //const float z = 1.f;
+        const float z = -0.5f;
+        const float half_grid_cell_size = 0.5f / (float)GridEmitter::GridCellsPerMeter;
+        current = { half_grid_cell_size + x / (float)GridEmitter::GridCellsPerMeter,
+            half_grid_cell_size + y / (float)GridEmitter::GridCellsPerMeter,
+            half_grid_cell_size + z / (float)GridEmitter::GridCellsPerMeter };
+        current.x -= GridEmitter::GridDistance / 2.f;
+        current.y -= GridEmitter::GridDistance / 2.f;
+        return true;
+    }
+};
 
 void PlannerGridEmitter::Preprocess(std::shared_ptr<const RoomGeometry> _room) {
     _room;
@@ -595,7 +633,9 @@ void PlannerGridEmitter::Simulate(PropagationResult& result, const nMath::Vector
     result.spread = spread;
     result.closest_point = closest_grid_pos;    
 
-    const auto& bc = BookChapterCode::SolveGridEmitter({_receiver, attenuation_range}, grid);
+    GridEmitterIterator iterator{ grid };
+    const auto& bc = BookChapterCode::VoxelsToAttenuatedPosition<GridEmitterIterator>(iterator,
+        BookChapterCode::Sphere{_receiver, attenuation_range}, kVoxelExtent);
     if (bc.position != result.emitter_direction || bc.spread != result.spread) {
         if (bc.position.x != FLT_MAX) {
             result.emitter_direction = bc.position;

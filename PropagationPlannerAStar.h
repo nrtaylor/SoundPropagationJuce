@@ -46,7 +46,9 @@ public:
     void Preprocess(std::shared_ptr<const RoomGeometry> _room) override;
     void Plan(const PropagationPlanner::SourceConfig& _config) override;
     void Simulate(PropagationResult& result, const nMath::Vector& _receiver, const float _time_ms) const override;
-
+    virtual SoundPropagation::MethodType GetMethod() const {
+        return SoundPropagation::Method_Pathfinding;
+    }
     static bool GridNodeSearched(std::shared_ptr<const PropagationSimulationCache> cache, int row, int col);
 
     const GeometryGrid& Grid() const
@@ -60,3 +62,6 @@ private:
     std::shared_ptr<const RoomGeometry> room;
     Coord source_coord;
 };
+
+typedef PlannerTwoStages<PlannerDirectLOS, PlannerAStar,
+    SoundPropagation::Method_LOSAStarFallback> PlannerLOSAStar;

@@ -85,6 +85,7 @@ public:
     };
     virtual void Plan(const SourceConfig& _config) = 0;
     virtual void Simulate(PropagationResult& result, const nMath::Vector& _receiver, const float _time_ms) const = 0;
+    virtual SoundPropagation::MethodType GetMethod() const = 0;
     virtual ~PropagationPlanner() = default;
 };
 
@@ -94,6 +95,9 @@ public:
     void Preprocess(std::shared_ptr<const RoomGeometry> _room) override;
     void Plan(const PropagationPlanner::SourceConfig& _config) override;
     void Simulate(PropagationResult& result, const nMath::Vector& _receiver, const float _time_ms) const override;
+    virtual SoundPropagation::MethodType GetMethod() const {
+        return SoundPropagation::Method_DirectLOS;
+    }
 private:
     nMath::Vector source;
     std::shared_ptr<const RoomGeometry> room;
@@ -108,6 +112,9 @@ public:
     void Preprocess(std::shared_ptr<const RoomGeometry> _room) override;
     void Plan(const PropagationPlanner::SourceConfig& _config) override;
     void Simulate(PropagationResult& result, const nMath::Vector& _receiver, const float _time_ms) const override;
+    virtual SoundPropagation::MethodType GetMethod() const {
+        return SoundPropagation::Method_GridEmitter;
+    }
 
     const std::shared_ptr<GridEmitter> GetGridEmitter() const { 
         return grid_emitter;
@@ -124,6 +131,9 @@ public:
     void Preprocess(std::shared_ptr<const RoomGeometry> _room) override;
     void Plan(const PropagationPlanner::SourceConfig& _config) override;
     void Simulate(PropagationResult& result, const nMath::Vector& _receiver, const float _time_ms) const override;
+    virtual SoundPropagation::MethodType GetMethod() const {
+        return SoundPropagation::Method_RayCasts;
+    }
 private:
     nMath::Vector source;
     std::shared_ptr<const RoomGeometry> room;
@@ -131,7 +141,7 @@ private:
     bool Intersects(PropagationResult& result, const nMath::Vector& start, const nMath::Vector& end) const;
 };
 
-template<class PlannerPrimary, class PlannerSecondary>
+template<class PlannerPrimary, class PlannerSecondary, SoundPropagation::MethodType Method>
 class PlannerTwoStages : public PropagationPlanner
 {
 public:
@@ -140,6 +150,9 @@ public:
     void Preprocess(std::shared_ptr<const RoomGeometry> _room) override;
     void Plan(const PropagationPlanner::SourceConfig& _config) override;
     void Simulate(PropagationResult& result, const nMath::Vector& _receiver, const float _time_ms) const override;
+    virtual SoundPropagation::MethodType GetMethod() const {
+        return Method;
+    }
 
     std::shared_ptr<const PlannerSecondary> Secondary() const
     {
@@ -171,7 +184,9 @@ public:
     void Preprocess(std::shared_ptr<const RoomGeometry> _room) override;
     void Plan(const PropagationPlanner::SourceConfig& _config) override;
     void Simulate(PropagationResult& result, const nMath::Vector& _receiver, const float _time_ms) const override;
-
+    virtual SoundPropagation::MethodType GetMethod() const {
+        return SoundPropagation::Method_Wave;
+    }
     void SetSolution(const SolutionType _solution_type) { solution_type = _solution_type; }
 private:
     std::vector<nMath::Vector> first_reflections;

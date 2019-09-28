@@ -134,7 +134,6 @@ private:
     std::atomic_int32_t receiver_x;
     std::atomic_int32_t receiver_y;
 
-    std::atomic_bool updating_planner_method;
     std::atomic<SoundPropagation::MethodType> current_method;
 
     Image image_spl;
@@ -203,7 +202,7 @@ private:
 
     ComboBox combo_selected_pan_law;
     Label label_selected_pan_law;
-
+    
     void timerCallback() override;
 
     void PaintEmitter(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) const;

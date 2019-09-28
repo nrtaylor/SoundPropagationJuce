@@ -158,7 +158,8 @@ MainComponent::MainComponent() :
         FileChooser chooser("Select Image File", File::getCurrentWorkingDirectory(), "*.png");
         if (chooser.browseForFileToOpen())
         {
-            ExportAsImage(chooser.getResult(), 1024, 1024, 2.f);
+            //ExportAsImage(chooser.getResult(), 1024, 1024, 2.f);
+            ExportAsImage(chooser.getResult(), 4096, 4096, 8.f);
         }
     };
     addAndMakeVisible(&button_save_image);
@@ -523,7 +524,6 @@ MainComponent::MainComponent() :
     combo_method.addItem("Plane Waves", SoundPropagation::Method_PlaneWave);
     combo_method.addItem("Grid Emitter", SoundPropagation::Method_GridEmitter);
     current_method = SoundPropagation::Method_DirectLOS;
-    updating_planner_method = false;
     combo_method.setSelectedId(SoundPropagation::Method_DirectLOS);
 
     addAndMakeVisible(&label_method);
@@ -683,13 +683,13 @@ void DrawMeter(Graphics& _g, const Rectangle<int> _bounds, const float gain, con
 }
 
 void MainComponent::PaintGridEmitterSimulation(Graphics& _g, const Rectangle<int> _bounds, const float _zoom_factor) {
-    if (updating_planner_method) {
-        return; // TODO: Fix underlying issue with planner pointer
-    }
     ReadWriteControl rw = RW_NONE;
     const uint32 current_read_index = read_index;
     if (simulation_results[current_read_index].lock.compare_exchange_strong(rw, RW_READING)) {        
         std::shared_ptr<const PropagationPlanner> planner = simulation_results[current_read_index].object.planner;
+        if (planner->GetMethod() != SoundPropagation::Method_GridEmitter) {
+            return;
+        }
         std::shared_ptr<const PlannerGridEmitter> grid_planner = std::dynamic_pointer_cast<const PlannerGridEmitter>(planner);        
         const GridEmitter::GeometryGrid& grid = grid_planner->GetGridEmitter()->Grid();
         const float min_extent = (float)nMath::Min(_bounds.getWidth(), _bounds.getHeight());
@@ -711,7 +711,7 @@ void MainComponent::PaintGridEmitterSimulation(Graphics& _g, const Rectangle<int
             }
         }
 
-        const nMath::Vector closest_point = simulation_results[current_read_index].object.result->closest_point;
+        const nMath::Vector closest_point = simulation_results[current_read_index].object.result->closest_point;        
         const nMath::Vector center = ImageHelper::Center(_bounds);
 
         nMath::Vector emitter_draw_pos{ closest_point.x * _zoom_factor + center.x,
@@ -814,8 +814,8 @@ void MainComponent::PaintSimulation(Graphics& _g, const Rectangle<int> _bounds, 
             std::shared_ptr<const PlannerAStar> astar_planner = std::dynamic_pointer_cast<const PlannerAStar>(planner);
             if (astar_planner == nullptr)
             {
-                if (std::shared_ptr<const PlannerTwoStages<PlannerDirectLOS, PlannerAStar> > planner_two =
-                    std::dynamic_pointer_cast<const PlannerTwoStages<PlannerDirectLOS, PlannerAStar>>(planner))
+                if (std::shared_ptr<const PlannerLOSAStar> planner_two =
+                    std::dynamic_pointer_cast<const PlannerLOSAStar>(planner))
                 {
                     astar_planner = planner_two->Secondary();
                 }
@@ -1505,10 +1505,13 @@ void MainComponent::comboBoxChanged(ComboBox* comboBoxThatHasChanged)
         {
             current_room = rooms[next_id - 1];    
         }
-        updating_planner_method = true;
-        current_method = static_cast<SoundPropagation::MethodType>(combo_method.getSelectedId());        
-        sources[selected_source].planner = PropagationPlanner::MakePlanner(current_method);
-        updating_planner_method = false;
+        current_method = SoundPropagation::Method_Off;
+        {
+            const SoundPropagation::MethodType next_method =
+                static_cast<SoundPropagation::MethodType>(combo_method.getSelectedId());
+            sources[selected_source].planner = PropagationPlanner::MakePlanner(current_method);
+            current_method = next_method;
+        }
  
         button_show_grid.setEnabled(false);
         button_show_crests_only.setEnabled(false);

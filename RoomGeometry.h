@@ -132,6 +132,7 @@ public:
 
     void GridOn(const nMath::Vector& position);
     const GeometryGrid& Grid() const { return grid; }
+       
 private:
     GeometryGrid grid;
 };

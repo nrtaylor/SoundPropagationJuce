@@ -343,7 +343,7 @@ namespace BookChapterCode {
 
     struct Sphere {
         Vector center;
-        float radius;        
+        float radius;
     };
 
     struct AttenuatedPosition {
@@ -354,7 +354,8 @@ namespace BookChapterCode {
     };
 
     // Input is the direction to any voxel center.
-    bool PointInsideVoxel(const Vector& direction, const float cell_extent) {
+    bool PointInsideVoxel(const Vector& direction,
+        const float cell_extent) {
         return fabsf(direction.x) < cell_extent &&
             fabsf(direction.y) < cell_extent &&
             fabsf(direction.z) < cell_extent;
@@ -375,7 +376,7 @@ namespace BookChapterCode {
         }
         return (near_field_range - dist_to_voxel) / near_field_range;
     }
-    
+
     template<typename VoxelContainer>
     AttenuatedPosition VoxelsToAttenuatedPosition(const VoxelContainer& voxels,
         const Sphere& receiver, const float voxel_extent) {
@@ -383,14 +384,19 @@ namespace BookChapterCode {
         const float attenuation_range = receiver.radius;
 
         float total_weight = 0.f;
+        float total_weight_ratio = 0.f;
         Vector total_direction = { 0.0, 0.0, 0.0 };
 
-        float closest_distance = FLT_MAX;
-        Vector closest_voxel_direction, closest_voxel_center = { 0.0, 0.0, 0.0 };
-                
-        for (const Vector voxel_center : voxels) {            
-            const Vector direction = voxel_center - receiver.center;
-            if (PointInsideVoxel(direction, kVoxelExtent)) {
+        float closest_distance = attenuation_range;
+        Vector closest_voxel_direction, closest_voxel_center =
+        { 0.0, 0.0, 0.0 };
+
+        float z_values[] = { 0.5, 3 };
+        int z_value = 0;
+        for (const Vector voxel_center : voxels) {
+            const Vector direction = voxel_center - receiver.center - Vector{ 0.0f, 0.0f, z_values[z_value++] };
+            if (PointInsideVoxel(direction, voxel_extent)) {
+                total_direction = { 0.0, 0.0, 0.0 };
                 closest_distance = 0.f;
                 closest_voxel_center = voxel_center;
                 break;
@@ -404,6 +410,7 @@ namespace BookChapterCode {
                     closest_voxel_center = voxel_center;
                 }
                 const float weight = attenuation_range - distance;
+                total_weight_ratio += (weight / distance);
                 total_direction += (weight / distance) * direction;
                 total_weight += weight;
             }
@@ -414,12 +421,13 @@ namespace BookChapterCode {
         const float total_dir_length = Length(total_direction);
         if (total_dir_length <= FLT_EPSILON) {
             spread = 1.f;
-            emitter_position += Vector{ closest_distance, 0.f, 0.f };
+            emitter_position += closest_voxel_center;
         }
         else if (total_weight > FLT_EPSILON) {
             spread = 1.f - total_dir_length / total_weight;
             const float near_field_lerp =
-                GetNearFieldInterpolation(closest_voxel_direction, voxel_extent);
+                GetNearFieldInterpolation(closest_voxel_direction,
+                    voxel_extent);
             if (near_field_lerp > 0.f) {
                 spread += (1.f - spread) * near_field_lerp;
             }
@@ -433,6 +441,119 @@ namespace BookChapterCode {
         result.spread = spread;
         result.closest_voxel_center = closest_voxel_center;
         return result;
+    }
+
+    constexpr int kNumSpeakers = 8;
+    struct SpeakerData {
+        float angle = 0;
+        float total_weight;
+    };
+
+    struct VirtualSpeakerSet {
+        std::array<SpeakerData, kNumSpeakers> speakers;
+        Vector closest_voxel_center = { 0.f, 0.f, 0.f };
+    };
+
+    template<typename VoxelContainer>
+    VirtualSpeakerSet VoxelsToVirtualSpeakers(const VoxelContainer& voxels,
+        const Sphere& receiver, const float voxel_extent) {
+
+        VirtualSpeakerSet speaker_set;
+        std::array<SpeakerData, kNumSpeakers>& speakers = speaker_set.speakers;
+
+        float angle_dist = 2 * M_PI / kNumSpeakers;
+        int speaker_id = 0;
+        for (auto& speaker : speakers) {
+            speaker.angle = angle_dist * speaker_id++;
+            speaker.total_weight = 0.f;
+        }
+
+        const float attenuation_range = receiver.radius;
+
+        float closest_distance = attenuation_range;
+        Vector& closest_voxel_center = speaker_set.closest_voxel_center;
+
+        for (const Vector voxel_center : voxels) {
+            const Vector direction = voxel_center - receiver.center;
+            if (PointInsideVoxel(direction, voxel_extent)) {
+                closest_distance = 0.f;
+                closest_voxel_center = voxel_center;
+                for (auto& speaker : speakers) {
+                    speaker.total_weight = 1.f / kNumSpeakers;
+                }
+                break;
+            }
+            const float distance = Length(direction);
+            if (distance < attenuation_range)
+            {
+                if (distance < closest_distance) {
+                    closest_distance = distance;
+                    closest_voxel_center = voxel_center;
+                }
+                const float weight = attenuation_range - distance;
+                const float angle = atan2f(direction.y, direction.x);
+                auto it_rhs = std::upper_bound(speakers.begin(), speakers.end(), angle,
+                    [](const float _angle, const SpeakerData& lhs) {
+                    return _angle < lhs.angle;
+                });
+                auto it_lhs = it_rhs - 1;                
+                if (it_rhs == speakers.end()) {
+                    it_rhs = speakers.begin();                    
+                }
+                float rhs_angle = it_rhs->angle;
+                if (rhs_angle < it_lhs->angle) {
+                    rhs_angle += 2.f * (float)M_PI;
+                }
+                const float angle_lerp = (angle - it_lhs->angle) / (rhs_angle - it_lhs->angle);
+                it_lhs->total_weight += weight * (1.f - angle_lerp);
+                it_rhs->total_weight += weight * angle_lerp;
+            }
+        }
+        return speaker_set;
+    }
+
+    float GainFromPosition(const VirtualSpeakerSet speaker_set) {
+        return Max(0.f, (20.f - Length(speaker_set.closest_voxel_center)) / 20.f);
+    }
+    
+    std::array<float, 5> VirtualSpeakerSetToSpeakerArrangment(const VirtualSpeakerSet speaker_set,
+        const std::array<float, 5> speaker_angles) {
+        std::array<float, 5> speaker_gains{};        
+        float total_weight = 0.f;
+        for (const auto& virtual_speaker : speaker_set.speakers) {
+            const float weight = virtual_speaker.total_weight;
+            if (weight <= FLT_EPSILON) {
+                continue;
+            }
+            float virtual_angle = virtual_speaker.angle;
+            auto it_rhs = std::upper_bound(speaker_angles.begin(), speaker_angles.end(),
+                virtual_angle);
+            auto it_lhs = (it_rhs != speaker_angles.begin() ? it_rhs : speaker_angles.end()) - 1;
+            if (it_rhs == speaker_angles.end()) {
+                it_rhs = speaker_angles.begin();
+            }
+            float rhs_angle = *it_rhs;
+            if (rhs_angle < *it_lhs) {
+                rhs_angle += 2.f * (float)M_PI;
+                if (virtual_angle < *it_lhs) {
+                    virtual_angle += 2.f * (float)M_PI;
+                }
+            }
+            const float angle_lerp = (virtual_angle - *it_lhs) / (rhs_angle - *it_lhs);
+            speaker_gains[it_lhs - speaker_angles.begin()] +=
+                weight * (1.f - angle_lerp);
+            speaker_gains[it_rhs - speaker_angles.begin()] +=
+                weight * angle_lerp;
+            total_weight += weight;
+        }
+        // Normalize
+        if (total_weight > FLT_EPSILON) {
+            const float rms = GainFromPosition(speaker_set);
+            for (float& gain : speaker_gains) {
+                gain = rms * sqrtf(gain / total_weight);
+            }
+        }
+        return speaker_gains;
     }
 }
 constexpr float kVoxelExtent = 0.5f / (float)GridEmitter::GridCellsPerMeter;
@@ -633,14 +754,24 @@ void PlannerGridEmitter::Simulate(PropagationResult& result, const nMath::Vector
     result.spread = spread;
     result.closest_point = closest_grid_pos;    
 
-    GridEmitterIterator iterator{ grid };
-    const auto& bc = BookChapterCode::VoxelsToAttenuatedPosition<GridEmitterIterator>(iterator,
-        BookChapterCode::Sphere{_receiver, attenuation_range}, kVoxelExtent);
-    if (bc.position != result.emitter_direction || bc.spread != result.spread) {
-        if (bc.position.x != FLT_MAX) {
-            result.emitter_direction = bc.position;
+    const auto receiver = BookChapterCode::Sphere{ _receiver, attenuation_range };
+    {
+        GridEmitterIterator iterator{ grid };
+        const auto& bc = BookChapterCode::VoxelsToAttenuatedPosition<GridEmitterIterator>(iterator,
+            receiver, kVoxelExtent);
+        if (bc.position != result.emitter_direction || bc.spread != result.spread) {
+            if (bc.position.x != FLT_MAX) {
+                result.emitter_direction = bc.position;
+            }
+            result.spread = bc.spread;
         }
-        result.spread = bc.spread;
+        result.gain = nMath::Max(0.f, (attenuation_range - closest_distance) / attenuation_range);
     }
-    result.gain = nMath::Max(0.f, (attenuation_range - closest_distance) / attenuation_range);
+
+    {
+        GridEmitterIterator iterator{ grid };
+        const auto speaker_set = BookChapterCode::VoxelsToVirtualSpeakers(iterator, receiver, kVoxelExtent);
+        const auto speaker_arrangement = BookChapterCode::VirtualSpeakerSetToSpeakerArrangment(speaker_set,
+        std::array<float, 5>{ M_PI / 3, M_PI_2, 2.f*M_PI / 3.f, 7.f*M_PI / 6.f, 11.f*M_PI / 6 });
+    }    
 }
